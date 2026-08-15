@@ -1,10 +1,11 @@
 # Anchor — plan
 
 Status: **audited, pre-build.** Nothing here is built. Converged through `/house-plan` twice — once
-on the design, once against §1's threat model, which produced the shipping order in §3.
+on the design, once against §1's threat model, which produced the build phases in §3.
 
 **Read §1 and §3 first.** §1 says who this defends against and is the brake on adding machinery. §3
-is the shipping order — everything in this document gets built, and §3 says in what sequence.
+is the build order — v1 is the release and v1 is everything here; the phases are how it gets built,
+not what goes out when.
 
 ---
 
@@ -120,28 +121,27 @@ so. That it also happens to close a loophole is a side effect, not the reason.
 that. Larger means a genuine departure takes longer to register. It is a tuning parameter, not a
 difficulty setting — see §1 on what this app is and is not defending against.
 
-## 3. Shipping order
+## 3. Build phases
 
-**Everything in this document gets built.** Geofencing, places, dock sessions, proximity and the
-beacon are all in scope — this section is about what ships *first*, not what gets cut.
+**v1 is the release, and v1 is everything in this document.** Nothing here is cut, and nothing ships
+in between. These are phases of one build, ordered by dependency and by risk — not increments that
+go out separately.
 
-The reason to sequence at all is that the whole thing is twelve build steps for a personal tool, and
-the likeliest failure mode is never finishing. Something usable early keeps that from happening, and
-tells you which of the later parts actually matter to you.
+The order matters for two reasons: later phases genuinely cannot be built before earlier ones, and
+the two phases most likely to fail are cheap to attempt and expensive to discover late.
 
-### v1 — the first thing worth using
+### Phase 1 — the alarm core
 
-**A morning alarm that only a tag across the flat can silence.** It needs no location, no Bluetooth,
-no hardware beyond a sticker, and no account beyond what NFC requires. It is also the half that
-solves the problem you described first.
+Everything else sits on this. A morning alarm that only a registered tag can silence, with no
+location and no Bluetooth involved.
 
 | | Decisions |
 | --- | --- |
 | Tag matching on UID, empty never matches | D1, D22 |
-| A role accepts any of its registered tags — this is how multiple homes work | D31 |
+| A role accepts any of its registered tags | D31 |
 | Tags may be fixed or portable | D34 |
 | Scan accepted only after ~15 steps since first ring | D35 |
-| Re-arm on Stop, **flat delay** | D2 |
+| Re-arm on Stop | D2, D18 |
 | Never gives up | D5 |
 | Escape hatch — press and hold, always available, never refused | D20 |
 | Cannot enable an alarm with no registered tag; deleting a tag disables it | D27 |
@@ -150,28 +150,34 @@ solves the problem you described first.
 | SQLite holds intent; AlarmKit is derived; reconcile on launch | §12 |
 | Settings freeze ±1h around the alarm | D7 |
 
-### What lands after, and in what order
+### Phase 2 — places and geofencing
 
-| Then | Brings |
-| --- | --- |
-| **v2 — places and geofencing** | D30, D32, D33 · the exit rules D3/D12/D13/D19/D26 · away-from-home degradation D9 · configurable radius D14 |
-| **v3 — Feature A, the evening alarm** | The dock alarm and Tag A · early docking · the settings freeze extended to session settings D21 |
-| **v4 — dock sessions and proximity** | The beacon · D11, D16, D24 · the grace period D17 · session persistence D15 |
-| **Polish** | Escalating re-arm D18 · history and stats · UI |
+Places (D30, D32, D33), the exit rules (D3, D12, D13, D19, D26), away-from-home degradation (D9), and
+the configurable radius (D14). Needs Phase 1's alarm lifecycle to attach to.
 
-Proximity is last because it needs hardware, a second native module, and an observation period before
-it is allowed to ring anything — not because it is optional. It is what makes the dock session a real
-behaviour rather than a one-time tap.
+### Phase 3 — Feature A, the evening alarm
 
-**Until v2 lands, v1 has no away-from-home mode**, because it has no location to reason about.
-Travel is covered by a portable tag (D34), and failing that by the escape hatch. D9's degradation
-arrives with places.
+The dock alarm, Tag A, early docking, and D21's extension of the settings freeze. Needs Phase 2,
+because Feature A only fires inside a known place.
 
-### What each stage is actually asking
+### Phase 4 — dock sessions and proximity
 
-v1 answers: *does being made to walk to a tag get me out of bed?* If it does, everything after it is
-worth the effort. If it does not, that is worth knowing after a fortnight rather than after twelve
-build steps — and the answer changes what the rest should look like, not whether to bother.
+The beacon, D11, D16, D24, the grace period (D17) and session persistence (D15). Last because it
+needs hardware, a second native module, and an observation period before it is allowed to ring
+anything — not because it is optional. It is what makes the dock session a real behaviour rather
+than a one-time tap.
+
+### The two phases that decide whether this works
+
+**The AlarmKit spike inside Phase 1** and **the proximity observation inside Phase 4** are where this
+most plausibly dies. Both are cheap to attempt and expensive to discover late, which is the whole
+argument for the ordering. The AlarmKit spike runs in the simulator with no account at all (§14), so
+there is no reason to defer it.
+
+**Nothing stops running Phase 1 on your own phone while the later phases are built.** It costs
+nothing, it is the only way to learn whether walking to a tag actually gets you up, and that answer
+shapes how much the later phases need to do. Release is still all-or-nothing; using it early is not
+the same thing as shipping it.
 
 ## 4. Prior art
 
@@ -208,7 +214,7 @@ Each is load-bearing. Changing one changes the design.
 | D15 | The dock session **persists across restart and force-quit** | Phones reboot and apps get killed for reasons that have nothing to do with the user. A session that forgets itself on a crash is simply broken |
 | D16 | A session ends on **confirmed geofence exit, or a user-set duration** from its start — whichever first | It must not depend on Feature B's alarm time; B may be disabled entirely (D10). A session that never closes corrupts the following night |
 | D17 | A **resumed or proximity-broken** dock alarm vibrates and notifies first, sounding only after a user-set delay unless docked | Coming home at 01:00 should not blast sleeping housemates. It also downgrades a 03:00 proximity false positive from a siren to a vibration — the best available mitigation for the project's highest risk |
-| D18 | The re-arm delay **shortens with each cycle** — **post-v1** | Stalling should get progressively worse. A flat delay is one line and is what v1 ships; escalation is state that has to be stored and reasoned about |
+| D18 | The re-arm delay **shortens with each cycle**, to a floor of ~10s | Stalling should get progressively worse rather than stay comfortable. The floor stops it becoming unsatisfiable — below roughly 10s you cannot cross a room before it fires again |
 | D19 | While any alarm alerts, location runs at **high accuracy**, capped at a few minutes from first ring | Makes D12 confirmation automatic with zero taps. The cap exists because D5 means an unanswered wake alarm rings forever, and unbounded GPS beside it would flatten the battery |
 | D20 | There is an **escape hatch**: a long-press-and-hold override that cancels any alarm and any session outright, logged and rate-limited | Illness, emergencies, and a lost or unreadable Tag B otherwise leave an alarm that literally cannot be stopped. An app that can trap its user is worse than one that can be cheated |
 | D21 | D7's freeze covers **session duration and grace settings**, not just alarm times | The same reasoning as D7: these are the settings that would be edited in the moment rather than deliberately. No blanket freeze during a session — changing anything means walking to the phone, which is what the app wanted |
@@ -454,7 +460,7 @@ worth taking.
 **TX power is the one thing to get right.** A stock beacon reaches 10–70m and would cover the entire
 flat, enforcing nothing. The ESP32 floor of −12 dBm may still be too coarse for a single room; if
 build step 9 shows the boundary landing outside the doorway, a USB beacon with a −40 dBm floor
-(around £25) is the fix. Start cheap — step 9 exists precisely to measure this.
+(around £25) is the fix. Start cheap — step 10 exists precisely to measure this.
 
 **Agent tooling, set up before the first line of code:** Expo Skills (`github.com/expo/skills`), the
 Expo MCP server (`docs.expo.dev/mcp`), and `llms.txt` so docs come from current Expo rather than
@@ -622,31 +628,26 @@ that never arrives.
 6. Widget extension.
 7. Feature B end to end (wake → any morning tag, D31), including tag registration, **the escape
    hatch**, the step gate (D35), and the `occurrences` record of whether each alarm actually fired
-   (D25). The escape hatch cannot wait — a v1 user can lose their only tag on the first night, and
-   without it the app has no off switch at all.
+   (D25). The escape hatch cannot wait — a tag can be lost on the first night, and without it the app
+   has no off switch at all.
 
-   **← v1 stops here.** A morning alarm cleared only by a tag across the flat is already the thing
-   that solves half the problem, and it works with none of the geofencing, sessions, proximity, or
-   beacon hardware. **Use it for a fortnight before building anything else.** The most likely way
-   this project fails is not a technical one — it is twelve steps of scaffolding for a personal tool
-   that never gets used. Everything below is v2.
+   **← end of Phase 1.** Runnable on your own phone from here, while the rest is built (§3).
 
-   **v1 deliberately ships without the settings lockout** (D7/D21, step 12). It is a probe for one
-   question — does being made to walk to a tag actually get me up? — and that is answered honestly
-   or not at all. If the fortnight ends with the alarm quietly disabled at 06:59 most mornings, that
-   is the finding, and it is a more useful one than any amount of enforcement built on top.
+8. **Phase 2 — places and geofencing.** Place setup, region monitoring, the exit rules (D3, D12,
+   D13, D19, D26), away-from-home degradation (D9). Also measures how fast a confirmed exit really
+   is, which decides whether D12 is usable or decorative.
+9. **Phase 3 — Feature A.** The dock alarm and Tag A, early docking, D21's extension of the settings
+   freeze. Comes after Phase 2 because Feature A only fires inside a known place.
+10. **Proximity spike**: beacon at low TX power, measure real flapping over several nights *with
+    alarms disabled* before letting it ring anything. Also verify that `AlarmManager.schedule`
+    completes inside the ~10s window iOS grants after a beacon event — D17's grace depends on it, and
+    if it does not, the grace has to be pre-scheduled at dock time and cancelled instead.
+11. **Phase 4 — dock sessions and proximity.** Sessions with persistence (D15, D16), proximity
+    enforcement (D11), the Bluetooth rules (D24) and the grace period (D17).
+12. History, stats, UI polish.
 
-8. Feature A without proximity (dock alarm → Tag A), plus home-region setup and the escape hatch.
-9. **Proximity spike**: beacon at low TX power, measure real flapping over several nights *with
-   alarms disabled* before letting it ring anything. Also verify that `AlarmManager.schedule`
-   completes inside the ~10s window iOS grants after a beacon event — D17's grace depends on it, and
-   if it does not, the grace has to be pre-scheduled at dock time and cancelled instead.
-10. Dock sessions + early docking.
-11. Geofence gating and Feature B degradation.
-12. Settings lockout, history, UI polish.
-
-Steps 5 and 9 are where this project most plausibly dies. Both are cheap spikes. Do them before
-building anything that assumes they work — and note step 9 runs in observation mode first, because
+Steps 5 and 10 are where this project most plausibly dies. Both are cheap spikes. Do them before
+building anything that assumes they work — and note step 10 runs in observation mode first, because
 the cost of getting proximity wrong is being woken at 03:00.
 
 ## 14. Risks
@@ -655,7 +656,7 @@ the cost of getting proximity wrong is being woken at 03:00.
 | --- | --- | --- |
 | **AlarmKit needs the `com.apple.developer.alarmkit` entitlement to run on a device** | Blocks device builds, not simulator ones | The **simulator works with only `NSAlarmKitUsageDescription`** — no account, no entitlement — so the integration is developable now. Device builds fail on the missing entitlement, and the capability was reported absent from the Developer Portal. Apply as soon as the account exists and treat the lead time as unknown |
 | NFC Tag Reading and App Groups need a **paid account** (~$99/yr) | Blocks steps 4–7 | Core NFC returns *Sandbox restriction* on a Personal Team; `expo-alarm-kit` needs an App Group too, so the alarm path is double-gated |
-| **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 9 |
+| **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 10 |
 | **False geofence exit silently stops the wake alarm** → overslept | Highest, and silent | D3: exit must be corroborated by a fresh fix; ambiguous → keep ringing. This is the risk D12 reintroduces and must be measured, not assumed |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
@@ -666,7 +667,7 @@ the cost of getting proximity wrong is being woken at 03:00.
 | The grace period becomes a repeatable bypass | **Accepted, not mitigated** | Judged unrealistic: repeatedly breaking proximity at home to farm five-minute windows is more effort than picking the phone up and ignoring the app. No cap in v1; revisit only if it happens |
 | Session, alarm, and mirror state disagree after a crash | Medium, silent | Reconciliation (§12): SQLite holds intent, AlarmKit and the mirror are derived, reconcile idempotently on launch and foreground |
 | **Location Always silently downgraded to While Using** → every geofence rule fails quietly | Highest, and silent | Treat as a blocking state (§8): Feature A refuses to arm, home screen says so. Never degrade silently |
-| **The project is never finished** — 12 steps for a personal tool | High, and the likeliest failure of all | The v1 cut at build step 7: a working morning alarm with no geofencing, sessions, or beacon. Use it for a fortnight before continuing |
+| **The project is never finished** — four phases for a personal tool | High, and the likeliest failure of all | Release is all-or-nothing by choice, so the usual mitigation of shipping early does not apply. What remains: Phase 1 is runnable on your own phone while the rest is built, and the two riskiest spikes sit as early as their dependencies allow |
 | **Step counting excludes wheelchair users** | Low personally, a real accessibility defect if shipped | D35 is the only proof-of-movement in the design. Shipping needs an alternative or an opt-out; for personal use it is acceptable, and recorded so it is not forgotten |
 | Motion & Fitness permission denied → no step gate | Medium | Fall back to tag-only enforcement and say so plainly. Never silently accept scans that should have been refused |
 | Phantom steps from a phone jostled in bed | Low | N is user-set; tune it upward if it happens. A handful of false steps will not reach a 20–30 step threshold |
@@ -764,8 +765,8 @@ What remains is empirical: values that can only be set by running the thing.
 
 ### Genuinely open
 
-1. **Is 60s the right proximity debounce?** Chosen on reasoning, not measurement. Build step 9's
+1. **Is 60s the right proximity debounce?** Chosen on reasoning, not measurement. Build step 10's
    observation period exists to replace it with a number derived from real overnight logs. It is the
    single value most likely to be wrong, and being wrong means either a false alarm or a bypass.
 2. **How fast is confirmed exit in practice?** D19 should make it near-instant, but that assumes a
-   clean GPS fix is available quickly from indoors near a door. Measurable in build step 11.
+   clean GPS fix is available quickly from indoors near a door. Measurable in build step 8.
