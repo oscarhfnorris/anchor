@@ -178,13 +178,22 @@ Solo, LLM-assisted, learning Expo along the way. Working days, not calendar days
 
 | Phase | Days | Where the variance is |
 | --- | --- | --- |
-| 1 — alarm core | 6–10 | The AlarmKit bridge. Fine if it behaves; add a week if it needs forking |
-| 2 — places and geofencing | 2–4 | Permission handling, and testing it means repeatedly leaving the house |
-| 3 — Feature A | 2–3 | Mostly reuses Phase 1's machinery |
-| 4 — sessions and proximity | 4–6 | Second native module, plus tuning TX power by trial |
-| Polish | 2–4 | Open-ended by nature |
+| 1 — alarm core | 4–7 | The AlarmKit bridge. Fine if it behaves; add a week if it needs forking |
+| 2 — places and geofencing | 2–3 | Permission handling, and testing it means repeatedly leaving the house |
+| 3 — Feature A | 1–2 | Mostly reuses Phase 1's machinery |
+| 4 — sessions and proximity | 3–5 | Second native module, plus tuning TX power by trial |
+| Polish | 2–3 | Open-ended by nature |
 
-**Roughly 3–5 weeks full-time equivalent; realistically a few months of evenings and weekends.**
+**Roughly 2–4 weeks full-time equivalent.**
+
+The estimate assumes current-generation assistance, which is not the same thing across the work.
+approvals-app's own history is the evidence: its first five months averaged ~127 commits a month and
+its last seven averaged ~490, on the same codebase and the same author.
+
+**Where that speed actually lands:** `core/` and its tests, the schema and migrations, golden traces,
+UI screens — anything already specified in this document, which is most of Phase 1 and 3. **Where it
+does not:** debugging a community native bridge that misbehaves, tuning beacon TX power by trial, and
+anything requiring a device in a place. Phase 4 barely moves.
 
 **Some of it cannot be compressed by working harder.** The AlarmKit entitlement sits in a queue of
 unknown length. Proximity needs one to two weeks of *nights* in observation mode before it is allowed
@@ -255,6 +264,7 @@ Each is load-bearing. Changing one changes the design.
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
 | D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
+| D37 | **Every business rule has a test.** A rule in `core/` without one is unfinished, not merely untested | `core/` is pure and needs no mocking, so the excuse for skipping is absent. It is also the only surface verifiable without sleeping — an untested rule there will first be checked by experiencing it at 03:00 |
 | D36 | **Every phase ends with a building, working app.** No phase may leave it half-wired | Each phase is additive over a working base, so stopping anywhere leaves something usable rather than a shell. It also keeps the seams honest — if adding places breaks the alarm, the layering was wrong, and that shows up at the end of the phase rather than at the end of the build |
 | D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set, default ~15) | Enough to prove you actually stood up, and no more. A portable tag scanned from bed accumulates zero steps, which is the case worth catching; a large N would just punish a small flat. Steps count from first ring, so stalling earns nothing |
 
@@ -576,23 +586,71 @@ Rules that matter, stated so a test can be written against each:
 
 ## 12. Data model
 
-SQLite via Drizzle. Kilobytes total.
+SQLite via Drizzle. Kilobytes of data, but normalised properly — the cost of getting it right is
+minutes and the cost of getting it wrong is a migration on a device holding the only copy.
 
-- `places` — id, name, centre, radius, last_active_at (D30)
-- `tags` — id, **place_id**, role (`dock` | `morning`), uid (hex), label, created_at. A role holds
-  many rows (D31); **unique on (place_id, uid)**, so one tag cannot hold both roles *at the same
-  place* (D22). Across places the same physical tag may be reused
-- `alarms` — one row per feature: kind, time, active weekdays, enabled, feature-specific settings.
-  **Global, not per place** (D32)
-- `beacons` — uuid/major/minor, label, last_seen, last_rssi. Referenced by a place rather than owned
-  by one, so a single carried beacon can serve several addresses
-- `occurrences` — per scheduled firing: due_at, fired_at, cleared_at, how it ended. **Whether an
-  alarm actually fired is the single most important thing to record** — a broken bridge otherwise
-  fails silently and the user simply oversleeps with no indication why (D25)
-- `sessions` — dock sessions: started, duration, state, ended, how it ended, proximity breaks, graces
-  used. **This table is live state, not just history** — a session must be rehydratable after process
-  death (D15), so it is the durable record of whether a night is in progress
-- `events` — alarm fired / stopped / scanned / stood down, for debugging why a night went wrong
+### Tables
+
+```
+places           id · name · latitude · longitude · radius_m · beacon_id? · created_at · updated_at
+beacons          id · proximity_uuid · major · minor · label · created_at · updated_at
+tags             id · uid · label · created_at · updated_at
+tag_roles        id · tag_id · role · place_id? · created_at
+alarms           id · kind · hour · minute · enabled · created_at · updated_at
+alarm_days       alarm_id · weekday
+dock_settings    alarm_id · session_hours · grace_seconds · created_at · updated_at
+occurrences      id · alarm_id · due_at · fired_at? · cleared_at? · outcome? · place_id? · created_at
+sessions         id · place_id · started_at · ends_at · ended_at? · end_reason? · created_at · updated_at
+session_events   id · session_id · kind · at
+app_settings     id(=1) · step_threshold · rearm_seconds · … · updated_at
+```
+
+### The decisions inside it
+
+**`tag_roles` is a junction, not columns on `tags`.** A physical tag has one identity and many jobs:
+dock at one place, morning at another, or portable and bound to none. Roles as columns would force
+one row per role per tag and duplicate the UID, which is the thing identity depends on.
+
+**Weekdays are rows, not a bitmask or a CSV string.** `alarm_days` is a junction with a composite
+primary key. A bitmask is unqueryable, unreadable in a dump, and breaks first normal form for the
+sake of six bytes.
+
+**`dock_settings` is separate from `alarms`.** Session duration and grace apply to one feature only.
+Putting them on the shared table means columns that are conditionally meaningless, and a reader
+cannot tell whether a NULL means "not applicable" or "not set".
+
+**Sessions carry no counters.** Proximity breaks and graces used are derived by counting
+`session_events`, never stored as columns to be kept in step by hand. A hand-synced count is a bug
+waiting for the one code path that forgets to increment it.
+
+**`app_settings` is one typed row, not key/value.** A generic EAV table loses types, loses
+constraints, and turns every read into a cast. `CHECK (id = 1)` keeps it a singleton.
+
+**Enums are `CHECK` constraints** — SQLite has none natively — sourced from the same union type the
+TypeScript uses, so the two cannot drift.
+
+### Constraints and indexes that carry weight
+
+| | |
+| --- | --- |
+| `tags.uid` **unique** | One row per physical tag. UID is the natural key (D1) |
+| `tag_roles (tag_id, place_id)` **unique** | One tag cannot hold two roles at the same place (D22) |
+| Partial unique on `tag_roles(tag_id) where place_id is null` | SQLite treats NULLs as distinct, so the constraint above does **not** cover portable tags. Without this a portable tag could be both dock and morning |
+| `beacons (proximity_uuid, major, minor)` **unique** | That triple *is* a beacon's identity |
+| `occurrences (alarm_id, due_at)` **unique** | Makes reconcile idempotent — re-running cannot double-insert |
+| Partial index `occurrences(due_at) where fired_at is null` | The D29 miss query, which runs on every launch |
+| Partial index `sessions(ended_at) where ended_at is null` | "Is a session open?" — the hottest query in Phase 4 |
+| An index on **every** foreign key | SQLite does not create them automatically, unlike Postgres |
+| `radius_m` **CHECK ≥ 100** | D14's floor belongs in the schema, not only in the UI |
+
+### Two SQLite specifics that bite
+
+**`PRAGMA foreign_keys = ON` must be set on every connection.** SQLite ships with foreign keys
+*disabled* by default, so a schema full of correct FK declarations silently enforces nothing.
+
+**Time is stored two different ways on purpose.** Schedules are `hour`/`minute` integers — wall-clock
+local, so 07:00 stays 07:00 across a DST boundary (D23). Instants (`fired_at`, `started_at`) are unix
+epoch milliseconds in UTC. Mixing the two is precisely how alarm apps drift by an hour twice a year.
 
 **One wrinkle.** The iOS widget extension runs in a separate process and cannot read the SQLite file.
 The handful of values native code needs at alarm time go in an **App Group `UserDefaults`**, written
@@ -713,7 +771,13 @@ Three consequences:
 1. **`core/` purity is not a style preference — it is the testability strategy.** `core/` is the only
    surface in the project that can be verified without sleeping. Every behaviour rule that lives
    outside it is a rule that will only ever be tested by experiencing it at 03:00.
-2. **`core/` gets exhaustive unit tests** against a synthetic clock — vitest, one tier, no harness.
+2. **Every rule in `core/` has a test** (D37), against a synthetic clock — vitest, one tier, no
+   harness. Not a coverage target: the decision table in §5 is the checklist, and each entry that
+   describes runtime behaviour maps to at least one test.
+
+   For scale, approvals-app carries roughly one line of test per three of source across 480 files.
+   `core/` should sit far above that — it is pure logic with no I/O to make testing awkward, and it
+   is the whole reason the architecture insists on that purity.
 
    **Almost nothing needs mocking.** `core/` is a reducer: feed it `(state, event)`, assert
    `(newState, effects)`. No timers, no I/O, no framework. Two rules keep it that way — **inject the

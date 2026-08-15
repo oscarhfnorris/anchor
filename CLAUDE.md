@@ -51,6 +51,19 @@ file a pointer, so they stay in sync.
 - **Never run prettier** (`--write` or `--check`). Match the surrounding style; formatting is
   manual/IDE.
 
+## Every business rule has a test
+
+A rule in `core/` without a test is **unfinished**, not merely untested (plan §5, D37). The decision
+table in the plan is the checklist — every entry describing runtime behaviour maps to at least one
+test. `core/` is a pure reducer with nothing to mock, so there is no cost to hide behind.
+
+Scenario tests are **golden traces**: a scripted event sequence asserted as the complete resulting
+sequence of states and effects, not spot checks. A trace written in one phase must still pass
+unchanged in every later phase — re-recording one needs a stated reason, because that is how the
+protection quietly disappears.
+
+DB tests take a fresh in-memory database each. Never share state between tests.
+
 ## Every phase ends working
 
 The app must **build and function at the end of every phase** (plan §3, D36). A phase is additive
