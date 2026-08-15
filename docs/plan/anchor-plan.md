@@ -57,20 +57,30 @@ wrong produces an alarm at exactly the wrong moment.
 have left the house, the tag that would clear the alarm is unreachable, and a phone screaming in
 public with no way to silence it is a worse outcome than a missed enforcement.
 
-Two conditions make this safe rather than a loophole:
+**The exit must be confirmed, not merely reported.** A region-exit event alone is not enough — GPS
+drifts indoors, and a spurious exit at 07:00 would silently cancel the alarm and let you oversleep.
+Corroborate with a fresh fix showing real distance beyond the radius. **If the fix is unavailable or
+ambiguous, keep ringing.** This is the same bias as everywhere else in the app except proximity.
 
-- **The exit must be confirmed, not merely reported.** A region-exit event alone is not enough — GPS
-  drifts indoors, and a spurious exit at 07:00 would silently cancel the alarm and let you oversleep.
-  Corroborate with a fresh fix showing real distance beyond the radius. **If the fix is unavailable
-  or ambiguous, keep ringing.** This is the same bias as everywhere else in the app except proximity.
-- **Re-entering resumes it.** If the alarm's active window has not expired, returning inside the
-  region brings the alarm back. Without this, "walk out of the front door and back" is a complete
-  bypass of the entire app.
+**What happens on return differs by feature, because their success conditions differ.**
 
-**Why stepping outside is not a shortcut.** The home radius is at least 150m and iOS debounces exit
-events. Satisfying this deliberately means walking a hundred-odd metres down the street, in the
-state you woke up in, with the alarm going the whole way — and then it resumes when you come back.
-That is strictly more effort than walking to the bathroom, which is the entire point.
+| | On confirmed exit | On return |
+| --- | --- | --- |
+| **Feature B — wake** | Stops for that occurrence | **Does not resume** |
+| **Feature A — dock** | Stops | **Resumes**, inside its window |
+
+The wake alarm exists to get you awake and out of the bedroom. Walking a hundred-plus metres from
+the house proves that more comprehensively than scanning Tag B ever could — the alarm's goal is
+already met, so bringing it back would be punishing success.
+
+The dock alarm exists to get the phone onto the dock. Leaving the house does not achieve that at
+all; the obligation is simply outstanding. So it resumes on return, and without that resume
+"step out of the front door and back" would bypass the feature entirely.
+
+**The radius is a difficulty dial, not just a geofence parameter.** It is user-configurable, floored
+at 100m because iOS geofencing degrades below that. Setting it small makes the wake alarm cheaper to
+escape; setting it large makes a genuine departure slower to register. The ±1h settings freeze (D7)
+covers it, so it cannot be shrunk at 06:55.
 
 ## 3. Prior art
 
@@ -102,7 +112,8 @@ Each is load-bearing. Changing one changes the design.
 | D10 | The two features are **independent** | Each is configured like a normal alarm. Feature B fires whether or not you docked last night |
 | D11 | The dock session is **enforced by proximity**, not trust | Without it, early docking and "tap then pick it back up" are open loopholes |
 | D12 | Leaving the home region while an alarm is alerting **stops it** — both features | The clearing tag is unreachable once you have left, and a phone screaming in public with no off switch is worse than a missed enforcement |
-| D13 | Re-entering the region **resumes** a D12-stopped alarm, if its window has not expired | Otherwise "step outside and come back" bypasses the entire app |
+| D13 | On return, the **dock alarm resumes** and the **wake alarm does not** | Their success conditions differ. Walking 150m from the house already proves you are awake and out of bed, so the wake alarm's goal is met. It does nothing to put the phone on the dock, so that obligation is still outstanding — and without the resume, "step outside and back" would bypass Feature A entirely |
+| D14 | The home radius is **user-configurable**, floored at 100m | iOS geofencing degrades below 100m. Above that it is a difficulty dial: small is easier to escape, large is slower to register a real departure. D7's freeze stops it being shrunk at 06:55 |
 
 ## 5. The dock session
 
@@ -211,10 +222,12 @@ Rules that matter, stated so a test can be written against each:
 - `stopPressed` on an unsatisfied alarm schedules a fresh alarm `rearmDelay` later. The original fire
   time is preserved across re-arms, so the give-up window measures from when the alarm *first* rang.
 - Presence may suppress Feature A entirely and may downgrade Feature B to dismissible.
-- A **confirmed exit transition** while alerting stops the alarm (D12); re-entry resumes it inside
-  its window (D13). A static `away` reading may not silence a ringing alarm, and `unknown` never may.
+- A **confirmed exit transition** while alerting stops the alarm (D12). A static `away` reading may
+  not silence a ringing alarm, and `unknown` never may.
+- On return, the **dock** alarm resumes inside its window; the **wake** alarm does not (D13).
 - An exit is confirmed only by a fresh fix showing real distance beyond the radius. An exit event
   that cannot be corroborated leaves the alarm ringing.
+- The home radius is configurable but never below 100m (D14).
 - Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
   not alerting.
 - Uncertain proximity state never rings (§5).
@@ -342,9 +355,9 @@ Named so the audit does not treat them as gaps:
    away? A session that never closes will corrupt the next night.
 6. **Should Feature A be suppressed on nights Feature B is disabled** (e.g. no alarm tomorrow)? They
    are independent by D10, which argues no — but docking with no morning alarm may be unwanted.
-7. **How long is the D13 resume window?** Leave at 07:00, return at 07:20 — does the wake alarm come
-   back? At 09:00, presumably not. The boundary is undecided and it is the difference between a
-   working rule and an exploitable one.
+7. **How long is the dock alarm's resume window?** Leave at 22:35, return at 22:50 — it should
+   resume. Return at 02:00, having been out all evening? Probably not; that night is over. The
+   boundary is undecided. (No longer a question for the wake alarm — D13 settles it.)
 8. **How fast is a confirmed exit in practice?** D12 is only usable if a genuine departure silences
    the alarm within a minute or two. If iOS takes ten minutes to confirm, the rule is decorative and
    the alarm rings all the way down the street anyway. Measurable in build step 11.

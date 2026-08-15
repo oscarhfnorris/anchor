@@ -38,8 +38,10 @@ default-keep novel findings unless disproved.
   The system Stop button is deprecated-but-unremovable in iOS 26.1, so re-arm is the only option.
 - **The morning alarm having no give-up path.** Deliberate — see the plan, §4 D5.
 - **Duplicated-looking dock/wake handling.** They are two independent features encoding genuinely
-  different rules (one is suppressible and gives up; the other degrades and never gives up). Do not
-  "unify" them — see the plan, §4 D10.
+  different rules (one is suppressible, gives up, and resumes on re-entry; the other degrades, never
+  gives up, and does not resume). Do not "unify" them — see the plan, §4 D10 and D13.
+- **The dock/wake asymmetry on re-entry.** Deliberate, and derived from their different success
+  conditions — see the plan, §4 D13. Not an oversight in whichever branch you read second.
 - **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §4 D4.
 - **Proximity code declining to ring when the beacon state is ambiguous.** That is the intended bias,
   not a missed case — see the plan, §5.
@@ -56,8 +58,10 @@ default-keep novel findings unless disproved.
 - **Silencing a ringing alarm on anything less than a corroborated exit.** A bare region-exit event,
   a static `away` reading, or a stale fix must not stop an alarm. Only a fresh fix showing real
   distance beyond the radius qualifies — see the plan, §4 D3/D12.
-- **A D12 exit-stop with no resume-on-re-entry.** Without D13, stepping outside and walking back is a
-  complete bypass of the app.
+- **The dock alarm not resuming on re-entry.** Without it, stepping outside and walking back bypasses
+  Feature A completely — see the plan, §4 D13.
+- **A configurable home radius accepting a value below 100m.** iOS geofencing degrades below that,
+  and the floor is what stops the radius becoming a one-tap escape hatch (D14).
 - **Treating `unknown` presence as `away`** — it silently weakens enforcement.
 - **Proximity ringing on a single missed beacon advertisement**, or on Bluetooth being off, or
   without a debounce window. This is the highest-severity defect class in the app: it wakes the user

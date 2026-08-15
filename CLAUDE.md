@@ -20,11 +20,13 @@ file a pointer, so they stay in sync.
   sticker you keep by the bed, which defeats the entire premise of the app. Compare normalised
   lowercase hex, and treat an empty UID as never matching — a failed read must not become a
   successful dismissal.
-- **Only a confirmed exit transition may silence a ringing alarm.** Leaving the home region while an
-  alarm alerts stops it, and returning resumes it inside its window. But "confirmed" is load-bearing:
-  a region-exit event must be corroborated by a fresh fix showing real distance beyond the radius. A
+- **Only a confirmed exit transition may silence a ringing alarm.** "Confirmed" is load-bearing: a
+  region-exit event must be corroborated by a fresh fix showing real distance beyond the radius. A
   static `away` reading may not silence a ringing alarm, and an uncorroborated exit leaves it
   ringing. A GPS glitch at 07:00 must not be able to cancel the alarm silently.
+- **On return, the dock alarm resumes and the wake alarm does not.** This asymmetry is deliberate and
+  follows from the features' different goals — walking that far already proves you are awake, but it
+  does nothing to put the phone on the dock. Do not "fix" one to match the other.
 - **`unknown` presence is not `away`.** Only a positive, corroborated "outside the home region"
   changes anything. No-fix-yet, permission-denied, and stale-location all mean *keep the alarm*.
 - **Uncertain proximity never rings.** Everywhere else the app biases toward the alarm sounding;
