@@ -281,7 +281,7 @@ tooling is now good.
 | Routing | Expo Router | Same file-based mental model as the Next App Router |
 | UI | NativeWind | Tailwind classes; carries the 4-point spacing discipline over |
 | DB | Drizzle + `expo-sqlite` | Same ORM idiom as the existing repo |
-| Alarm (iOS) | `expo-alarm-kit` or `react-native-nitro-ios-alarm-kit` | Community packages — pin exact versions |
+| Alarm (iOS) | `expo-alarm-kit` or `react-native-nitro-ios-alarm-kit` | Community packages — pin exact versions. **iOS deployment target 26.0**, so the app runs on nothing older. `expo-alarm-kit` requires an App Group whose identifier must match its `configure()` call exactly; the Nitro module needs a physical device and no-ops entirely on Android |
 | Alarm UI (iOS) | `@bacons/apple-targets` → widget extension | `AlarmAttributes` is an `ActivityAttributes`, so this is mandatory |
 | NFC | `react-native-nfc-manager` | Covers both platforms |
 | Proximity | `react-native-beacon-radar` | iBeacon, Expo-compatible in a dev build, has background scanning |
@@ -418,9 +418,22 @@ together. That is necessary, just not sufficient.
 
 ## 11. Build order
 
+**Steps 1–3 need no paid account.** They are also the highest-value, lowest-risk work in the
+project, which makes the provisioning boundary and the sensible work order the same line.
+
+A free Personal Team gives 7-day provisioning profiles, 3 devices and 10 App IDs a week, and it
+covers Expo, Expo Router, NativeWind, Drizzle, `expo-location`, and BLE beacons. It does **not**
+cover Core NFC (which returns *Sandbox restriction*), App Groups, or the AlarmKit entitlement — so
+steps 4 onward are gated.
+
+**Apply for the AlarmKit entitlement the day the account exists**, then carry on with steps 1–3 while
+it queues. Serialising behind it wastes the wait; ignoring it risks building `core/` for a capability
+that never arrives.
+
 1. Repo conventions + agent tooling (done).
 2. Expo app scaffold, dev client, prebuild, NativeWind, Drizzle. Prove it runs on device.
-3. `core/` + its tests, against a synthetic clock. No UI, no native.
+3. `core/` + its tests, against a synthetic clock, plus the night simulator. No UI, no native — this
+   step runs entirely in Node and needs no device or account at all.
 4. NFC read → show a UID on screen. Proves the capability and the provisioning.
 5. **AlarmKit spike**: schedule, fire, launch-on-dismissal, re-arm. The riskiest step.
 6. Widget extension.
@@ -457,7 +470,8 @@ the cost of getting proximity wrong is being woken at 03:00.
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| NFC Tag Reading capability needs a **paid Apple Developer account** (~$99/yr) | Blocks everything | Confirm before step 2 |
+| **AlarmKit needs a managed entitlement Apple must approve** (`com.apple.developer.alarmkit`) — not unlocked by paying | Blocks everything, with a queue and a possibility of refusal | Apply the day the account exists, in parallel with steps 1–3. An alarm app is a legitimate use case, but the lead time is real and unknown |
+| NFC Tag Reading and App Groups need a **paid account** (~$99/yr) | Blocks steps 4–7 | Core NFC returns *Sandbox restriction* on a Personal Team; `expo-alarm-kit` needs an App Group too, so the alarm path is double-gated |
 | **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 9 |
 | **False geofence exit silently stops the wake alarm** → overslept | Highest, and silent | D3: exit must be corroborated by a fresh fix; ambiguous → keep ringing. This is the risk D12 reintroduces and must be measured, not assumed |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
