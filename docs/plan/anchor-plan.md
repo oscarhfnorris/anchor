@@ -288,9 +288,25 @@ tooling is now good.
 | Geofence | `expo-location` + TaskManager | Covers both platforms |
 | Payments (deferred) | RevenueCat | Only if this ever ships |
 
-**Hardware:** two NFC tags (NTAG215 stickers are fine) plus **one powered BLE beacon** with
-adjustable TX power at the dock. The adjustability is not optional — a stock beacon reaches 10–70m,
-which would cover the whole flat and enforce nothing.
+### Hardware — roughly £10, and the same kit serves Android later
+
+| Item | Cost | Notes |
+| --- | --- | --- |
+| NTAG213 stickers ×10–20 | ~£5 | Matching is on **UID only** (D1), so no storage is needed and the cheapest tag is the right one |
+| ESP32 board as an iBeacon | ~£3–5 | Flashed via ESPHome; TX power settable −12 to +9 dBm |
+
+Any two NFC cards already in a drawer would work — **except payment cards**, which randomise their
+UID by design. Stickers are worth buying anyway, because the tags need mounting on a wall or a kettle.
+
+**Run the beacon off USB at the dock.** There is a plug there already, since that is where the phone
+charges. This is not a convenience: it deletes the "beacon battery dies mid-night" failure mode
+outright, which §5 rates high-severity and silent. A hardware choice removing a whole risk row is
+worth taking.
+
+**TX power is the one thing to get right.** A stock beacon reaches 10–70m and would cover the entire
+flat, enforcing nothing. The ESP32 floor of −12 dBm may still be too coarse for a single room; if
+build step 9 shows the boundary landing outside the doorway, a USB beacon with a −40 dBm floor
+(around £25) is the fix. Start cheap — step 9 exists precisely to measure this.
 
 **Agent tooling, set up before the first line of code:** Expo Skills (`github.com/expo/skills`), the
 Expo MCP server (`docs.expo.dev/mcp`), and `llms.txt` so docs come from current Expo rather than
@@ -422,9 +438,16 @@ together. That is necessary, just not sufficient.
 project, which makes the provisioning boundary and the sensible work order the same line.
 
 A free Personal Team gives 7-day provisioning profiles, 3 devices and 10 App IDs a week, and it
-covers Expo, Expo Router, NativeWind, Drizzle, `expo-location`, and BLE beacons. It does **not**
-cover Core NFC (which returns *Sandbox restriction*), App Groups, or the AlarmKit entitlement — so
-steps 4 onward are gated.
+covers Expo, Expo Router, NativeWind, Drizzle, `expo-location`, and BLE beacons on a real device. It
+does **not** cover Core NFC (which returns *Sandbox restriction*), App Groups, or AlarmKit on device.
+
+**The simulator is the exception worth exploiting.** AlarmKit runs there with only the Info.plist
+usage description, so step 5's spike — schedule, fire, launch-on-dismissal, re-arm — can be built and
+tested before any account exists. NFC and BLE cannot: the simulator has neither radio.
+
+**The 7-day expiry settles the question regardless.** An alarm that silently stops working every week
+is not an alarm. The paid account is required for real use even where a capability would otherwise
+work.
 
 **Apply for the AlarmKit entitlement the day the account exists**, then carry on with steps 1–3 while
 it queues. Serialising behind it wastes the wait; ignoring it risks building `core/` for a capability
@@ -470,13 +493,13 @@ the cost of getting proximity wrong is being woken at 03:00.
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| **AlarmKit needs a managed entitlement Apple must approve** (`com.apple.developer.alarmkit`) — not unlocked by paying | Blocks everything, with a queue and a possibility of refusal | Apply the day the account exists, in parallel with steps 1–3. An alarm app is a legitimate use case, but the lead time is real and unknown |
+| **AlarmKit needs the `com.apple.developer.alarmkit` entitlement to run on a device** | Blocks device builds, not simulator ones | The **simulator works with only `NSAlarmKitUsageDescription`** — no account, no entitlement — so the integration is developable now. Device builds fail on the missing entitlement, and the capability was reported absent from the Developer Portal. Apply as soon as the account exists and treat the lead time as unknown |
 | NFC Tag Reading and App Groups need a **paid account** (~$99/yr) | Blocks steps 4–7 | Core NFC returns *Sandbox restriction* on a Personal Team; `expo-alarm-kit` needs an App Group too, so the alarm path is double-gated |
 | **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 9 |
 | **False geofence exit silently stops the wake alarm** → overslept | Highest, and silent | D3: exit must be corroborated by a fresh fix; ambiguous → keep ringing. This is the risk D12 reintroduces and must be measured, not assumed |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
-| Beacon battery dies silently mid-session | High | Verify beacon at dock time; warn on weakening signal |
+| Beacon battery dies silently mid-session | **Eliminated by hardware choice** | Run the beacon off USB at the dock (§7). A mains-powered beacon has no battery to die. Verify-at-dock-time remains as a backstop for unplugging |
 | iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 9 measures the truth |
 | Two native modules now (AlarmKit + beacons) | Medium | Both are Expo-dev-build compatible; neither works in Expo Go |
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
@@ -499,8 +522,18 @@ Three consequences:
 1. **`core/` purity is not a style preference — it is the testability strategy.** `core/` is the only
    surface in the project that can be verified without sleeping. Every behaviour rule that lives
    outside it is a rule that will only ever be tested by experiencing it at 03:00.
-2. **`core/` gets exhaustive unit tests** against a synthetic clock — vitest, one tier, no harness
-   (the DB is a file, or `:memory:`).
+2. **`core/` gets exhaustive unit tests** against a synthetic clock — vitest, one tier, no harness.
+
+   **Almost nothing needs mocking.** `core/` is a reducer: feed it `(state, event)`, assert
+   `(newState, effects)`. No timers, no I/O, no framework. Two rules keep it that way — **inject the
+   clock as a parameter** rather than mocking global timers, and use **hand-written fakes** for the
+   four service interfaces (alarm, NFC, geo, proximity) rather than a mocking library. Those fakes
+   are ~20 lines each and double as the night simulator's backend.
+
+   **The one thing that does need a real database** is the Drizzle schema. `expo-sqlite` will not run
+   in Node, so tests run the same schema against **`better-sqlite3`** — same query builder, different
+   driver. That validates schema and queries, though not the React Native bridge. It is a handful of
+   tests, not a second tier.
 3. **A night simulator is the highest-value testing investment in the project.** A dev screen that
    drives a whole night through the state machine in seconds with synthetic events: alarm fired,
    stop pressed, wrong tag scanned, beacon lost, geofence exited, phone restarted mid-session. It
