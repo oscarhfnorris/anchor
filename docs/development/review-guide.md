@@ -100,7 +100,16 @@ default-keep novel findings unless disproved.
 - Comments interleaved between fields of an object or array literal.
 - New behaviour rule in `core/` with no test.
 
-## C. Scope
+## C. Tests
+
+- Every behaviour rule in `core/` needs a test. Rules outside `core/` are only ever tested by
+  sleeping, which is why they should not be outside `core/`.
+- **A scenario's golden trace must not change when a later phase lands.** If Phase 2 alters a Phase 1
+  trace, that is a regression, not an update — do not re-record it without a stated reason.
+- DB tests take a fresh database per test. A test that depends on another test's rows is a defect
+  even when it passes.
+
+## D. Scope
 
 - One concern per change. Tests added, or a stated reason.
 - Every finding fixed or dismissed **with a reason**.

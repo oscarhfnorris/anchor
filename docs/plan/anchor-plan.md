@@ -172,6 +172,25 @@ needs hardware, a second native module, and an observation period before it is a
 anything — not because it is optional. It is what makes the dock session a real behaviour rather
 than a one-time tap.
 
+### Rough effort
+
+Solo, LLM-assisted, learning Expo along the way. Working days, not calendar days.
+
+| Phase | Days | Where the variance is |
+| --- | --- | --- |
+| 1 — alarm core | 6–10 | The AlarmKit bridge. Fine if it behaves; add a week if it needs forking |
+| 2 — places and geofencing | 2–4 | Permission handling, and testing it means repeatedly leaving the house |
+| 3 — Feature A | 2–3 | Mostly reuses Phase 1's machinery |
+| 4 — sessions and proximity | 4–6 | Second native module, plus tuning TX power by trial |
+| Polish | 2–4 | Open-ended by nature |
+
+**Roughly 3–5 weeks full-time equivalent; realistically a few months of evenings and weekends.**
+
+**Some of it cannot be compressed by working harder.** The AlarmKit entitlement sits in a queue of
+unknown length. Proximity needs one to two weeks of *nights* in observation mode before it is allowed
+to ring anything. Geofence behaviour can only be checked by actually going out and coming back. Those
+are calendar time, not effort, and they run in parallel with other phases rather than blocking them.
+
 ### The two phases that decide whether this works
 
 **The AlarmKit spike inside Phase 1** and **the proximity observation inside Phase 4** are where this
@@ -711,6 +730,42 @@ Three consequences:
    stop pressed, wrong tag scanned, beacon lost, geofence exited, phone restarted mid-session. It
    costs almost nothing precisely because `core/` is pure, and it is the only way to exercise the
    failure paths that matter without waiting for them to happen for real.
+
+### The Drizzle harness
+
+approvals-app runs `TEST_PARALLEL_DBS=N` against one Docker container holding N isolated Postgres
+databases, with a `pretest` hook managing the container lifecycle. **None of that is needed here**,
+and copying it would import a solution to a problem SQLite does not have.
+
+SQLite has no shared server, so **a fresh `:memory:` database per test is the isolation model**.
+Vitest already runs files in parallel across worker threads; with no ports, no container and no
+cross-test state, parallelism costs nothing and needs no configuration.
+
+**The trick that makes thousands of tests cheap:** migrating a fresh database per test would dominate
+the runtime. Instead, migrate **once** into a template, snapshot it with `better-sqlite3`'s
+`db.serialize()`, and `Database.deserialize()` that buffer per test. Restoring a migrated database
+becomes a memcpy rather than a migration run.
+
+```
+migrate once  →  serialize()  →  Buffer
+per test      →  deserialize(buffer)  →  isolated db, already migrated
+```
+
+Alongside it: factory helpers for tags, alarms, places and sessions, so a test states the two facts
+it cares about instead of building a whole object graph.
+
+### Golden traces are what lock the phases
+
+`core/` being a reducer means a scenario can be expressed as a scripted sequence of events and
+asserted as a **complete trace** of resulting states and effects — not a handful of spot assertions.
+
+Write one per scenario that matters: first night, tag lost, hotel, DST boundary, both alarms at once,
+beacon lost mid-session, phone restarted, exit-and-return.
+
+**A Phase 1 trace must still pass unchanged after Phase 4.** That is D36 expressed as a test rather
+than a promise: if adding places alters what the alarm does on an ordinary night, the layering leaked
+and the trace says so immediately. Re-recording a trace is how that protection gets lost, so it needs
+a stated reason every time.
 
 ### Enforcing `core/` purity
 
