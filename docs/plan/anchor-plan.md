@@ -704,6 +704,19 @@ that never arrives.
 
 1. Repo conventions + agent tooling (done).
 2. Expo app scaffold, dev client, prebuild, NativeWind, Drizzle. Prove it runs on device.
+
+   **Drizzle on Expo needs migrations bundled as strings**, since there is no filesystem to read them
+   from at runtime: `babel-plugin-inline-import` for `.sql`, `sql` pushed onto Metro's `sourceExts`,
+   `driver: 'expo'` in `drizzle.config.ts`, and `useMigrations(db, migrations)` at startup. Omitting
+   the Metro line fails as a syntax error importing migrations, which reads like a bundler fault
+   rather than a config one.
+
+   The point of Drizzle here is that **one schema file drives both drivers** — `expo-sqlite` on
+   device, `better-sqlite3` in tests (§15). Without that the harness would be testing a different
+   schema from the one that ships.
+
+   Three things it does not do: enable foreign keys, offer `db:push` against a device (generate and
+   commit the SQL every time), or index foreign keys.
 3. `core/` + its tests, against a synthetic clock, plus the night simulator. No UI, no native — this
    step runs entirely in Node and needs no device or account at all.
 4. NFC read → show a UID on screen. Proves the capability and the provisioning.
