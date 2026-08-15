@@ -4,7 +4,7 @@ How the **plan/design audit** works and the lenses it applies. The planning-side
 `review-guide.md` (which audits *code*). `/house-plan` loads this. Single source of truth for how we
 adversarially audit a plan, design doc, or runbook **before** it becomes code.
 
-Adapted from the same guide in the approvals-app repo. The lenses and the verdict vocabulary are
+Adapted from the same guide in a mature repo in a related stack. The lenses and the verdict vocabulary are
 stack-agnostic; only the examples changed.
 
 ## Run

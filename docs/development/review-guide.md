@@ -3,8 +3,8 @@
 How code review works here and the rules it applies. `/house-review` loads this. The planning-side
 counterpart is `plan-audit-guide.md`.
 
-Adapted from the approvals-app repo. The verdict machinery is unchanged; Parts A and B are rewritten
-for this stack — importing that repo's Postgres, tRPC, and multi-tenant rules wholesale would be
+Adapted from a mature repo in a related stack. The verdict machinery is unchanged; Parts A and B are rewritten
+for this project — importing its Postgres, tRPC, and multi-tenant rules wholesale would be
 ceremony with nothing to push back on.
 
 ## Run

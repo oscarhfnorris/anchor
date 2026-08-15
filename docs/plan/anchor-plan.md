@@ -207,7 +207,7 @@ carries the entire foundation plus two native integrations, and `@bacons/apple-t
 two of yak-shaving the first time regardless of how well the logic goes.
 
 The estimate assumes current-generation assistance, but that multiplier has to be applied carefully.
-approvals-app's first five months averaged ~127 commits a month and its last seven averaged ~490 —
+a mature repo in the same TypeScript stack averaged ~127 commits a month over its first five and ~490 over its last seven —
 but that measures velocity on a **familiar codebase in a familiar stack**, which is the opposite of
 Phase 1 here. Treat it as evidence about the specified-logic parts, not about the total.
 
@@ -496,6 +496,7 @@ tooling is now good.
 | Layer | Choice | Note |
 | --- | --- | --- |
 | Framework | Expo + TypeScript, **dev client** | Expo Go cannot load native modules; prebuild from day one |
+| Package manager | **npm** | See below — a deliberate choice, not a default |
 | Routing | Expo Router | Same file-based mental model as the Next App Router |
 | UI | NativeWind | Tailwind classes; carries the 4-point spacing discipline over |
 | DB | Drizzle + `expo-sqlite` | Same ORM idiom as the existing repo |
@@ -505,6 +506,24 @@ tooling is now good.
 | Proximity | `react-native-beacon-radar` | iBeacon, Expo-compatible in a dev build, has background scanning |
 | Geofence | `expo-location` + TaskManager | Covers both platforms |
 | Payments (deferred) | RevenueCat | Only if this ever ships |
+
+### Package manager: npm, for one specific reason
+
+Expo supports npm, Bun, pnpm and Yarn as first-class options, and Bun is materially faster.
+
+**pnpm is the worst fit.** Its isolated install strategy is the default and React Native needs
+`node-linker=hoisted`, which discards the very thing pnpm is for.
+
+**Bun is a reasonable choice** — hoisted by default, so the `node_modules` layout matches npm's, and
+installs are much faster.
+
+**npm anyway, for Phase 0.** Two of the three native modules are young and community-maintained, and
+every one of their READMEs, every error message, and every community answer assumes npm. Phase 0's
+entire job is establishing a baseline that works; when `expo prebuild` fails against an AlarmKit
+bridge, the question must be *what is wrong with the bridge*, never *is it the package manager*.
+
+Swap to Bun once the baseline is green if install time becomes irritating. That is a cheap,
+reversible change later and an unnecessary variable now.
 
 ### Hardware — roughly £10, and the same kit serves Android later
 
@@ -846,7 +865,7 @@ that never arrives.
    | `test/db.ts` | The same pragma, plus the migrate-once / serialize / deserialize template (§15). FKs off in tests means violations pass locally and fail on device |
 
    **Done when:** the app boots on device, NativeWind styles a screen, a Drizzle migration runs,
-   `npm test` passes, **and the purity rule has been proven to fire** by adding a deliberately
+   `npm test` **and `npm run check:code`** both pass, **and the purity rule has been proven to fire** by adding a deliberately
    forbidden import to `core/` and watching the build break. A rule believed to be enforced but not
    actually wired is worse than no rule.
 
@@ -940,7 +959,7 @@ Three consequences:
    harness. Not a coverage target: the decision table in §5 is the checklist, and each entry that
    describes runtime behaviour maps to at least one test.
 
-   For scale, approvals-app carries roughly one line of test per three of source across 480 files.
+   For scale, a mature repo in this stack carries roughly one line of test per three of source across 480 files.
    `core/` should sit far above that — it is pure logic with no I/O to make testing awkward, and it
    is the whole reason the architecture insists on that purity.
 
@@ -962,7 +981,7 @@ Three consequences:
 
 ### The Drizzle harness
 
-approvals-app runs `TEST_PARALLEL_DBS=N` against one Docker container holding N isolated Postgres
+A Postgres-backed project runs `TEST_PARALLEL_DBS=N` against one Docker container holding N isolated
 databases, with a `pretest` hook managing the container lifecycle. **None of that is needed here**,
 and copying it would import a solution to a problem SQLite does not have.
 
@@ -1002,7 +1021,7 @@ An ESLint `no-restricted-imports` zone rule, failing hard — **not** an advisor
 convention whose violation silently destroys the architecture, and unlike most house rules it is
 trivially detectable statically.
 
-### What we take from approvals-app, and what we don't
+### What we take from the reference repo, and what we don't
 
 | | |
 | --- | --- |
@@ -1014,18 +1033,52 @@ trivially detectable statically.
 Apps. Anchor has no server. More decisively, **iOS builds cannot run in a container at all** — they
 need macOS and Xcode. The equivalent is EAS Build, or macOS runners at a 10× minute multiplier.
 
-**pwsh does not transfer.** In approvals-app it orchestrates real infrastructure — Azure databases,
+**pwsh does not transfer.** In the reference repo it orchestrates real infrastructure — cloud databases,
 obfuscation, tenant copies — with Pester and PSScriptAnalyzer behind it. Anchor has no
 infrastructure. The remaining scripting need is one house-rules checker, which node runs natively.
 
-**Anchor needs one check approvals-app has no analogue for:** `expo-doctor`, which validates SDK and
+**Anchor needs one check the reference repo has no analogue for:** `expo-doctor`, which validates SDK and
 native dependency compatibility. Given two young native modules, that is a real gate.
+
+### `check:code` — one command, everything deterministic
+
+A single orchestrator script rather than a chain of `&&` or a `concurrently` invocation, because the
+output is then ours to control:
+
+| | |
+| --- | --- |
+| `lint` | eslint, including the `core/` purity rule |
+| `types` | `tsc --noEmit` against a check-only tsconfig |
+| `test` | vitest |
+| `doctor` | `expo-doctor` — SDK and native dependency compatibility |
+
+It runs the independent checks **concurrently**, groups each task's output under its own coloured
+tag rather than interleaving them, and closes with a duration-sorted timing summary so the slow step
+is obvious. Spawned directly, with no shell-specific piping, so it behaves the same everywhere.
+
+**Gating and advisory are different tools, and the distinction is what makes both worth having.**
+
+- `check:code` **gates** — it exits non-zero and blocks. Every rule in it must have a **zero
+  baseline** today, so adding it costs nothing now and blocks the next instance.
+- The house-rules scan is **advisory** — always exits 0, never gates. It surfaces conventions that
+  would otherwise be re-taught in review, and it runs in `/house-review` and CI rather than here.
+- **A rule with pre-existing violations belongs in the advisory scan, not the gate.** Putting it in
+  the gate means either a permanently red build or a backlog nobody can clear, and both end with the
+  gate being ignored.
+
+**CI runs the same command with no extra flags.** Local and CI must not diverge — the moment they do,
+a green local run stops meaning anything.
+
+### Definition of done, everywhere
+
+`npm test` **and** `npm run check:code`, both green. Not one or the other: tests prove behaviour,
+`check:code` proves the rules the behaviour depends on are still enforced. A phase that passes tests
+while `core/` has quietly grown a native import has not finished.
 
 ### CI shape (start here, grow later)
 
-On every PR, on ubuntu: `type-check` · `lint` (including the `core/` purity rule) · `test` ·
-`expo-doctor` · the advisory house-rules scan. **No device builds in CI initially** — macOS runners
-are expensive and EAS on demand is enough for a solo project.
+On every PR, on ubuntu: `npm run check:code` and the advisory house-rules scan. **No device builds in
+CI initially** — macOS runners are expensive and EAS on demand is enough for a solo project.
 
 ## 16. Deliberately out of scope
 

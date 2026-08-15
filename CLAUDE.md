@@ -68,6 +68,17 @@ protection quietly disappears.
 
 DB tests take a fresh in-memory database each. Never share state between tests.
 
+## Done means check:code too
+
+Nothing is finished on `npm test` alone. **`npm test` and `npm run check:code` must both be green.**
+Tests prove behaviour; `check:code` proves the rules that behaviour depends on are still enforced —
+lint including `core/` purity, types, and `expo-doctor`.
+
+A change that passes tests while `core/` has quietly grown a native import has not finished.
+
+**Gates need a zero baseline.** A rule with pre-existing violations belongs in the advisory scan, not
+in `check:code` — a permanently red gate is a gate everyone learns to ignore.
+
 ## Every phase ends working
 
 The app must **build and function at the end of every phase** (plan §3, D36). A phase is additive
