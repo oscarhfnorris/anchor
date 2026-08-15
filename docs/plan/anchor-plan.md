@@ -242,7 +242,57 @@ the cost of getting proximity wrong is being woken at 03:00.
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
 | Force-quitting the app defeats re-arm | Accepted | Out of scope — the adversary is a sleepy user, not an attacker |
 
-## 12. Deliberately out of scope
+## 12. Testing and CI
+
+**The constraint that shapes everything: the core behaviour cannot be automatically tested.** No CI
+runner can tap an NFC tag, walk away from a beacon, or cross a geofence. There is no Playwright
+equivalent here — Maestro and Detox drive the UI, not the physical world this app is about.
+
+Three consequences:
+
+1. **`core/` purity is not a style preference — it is the testability strategy.** `core/` is the only
+   surface in the project that can be verified without sleeping. Every behaviour rule that lives
+   outside it is a rule that will only ever be tested by experiencing it at 03:00.
+2. **`core/` gets exhaustive unit tests** against a synthetic clock — vitest, one tier, no harness
+   (the DB is a file, or `:memory:`).
+3. **A night simulator is the highest-value testing investment in the project.** A dev screen that
+   drives a whole night through the state machine in seconds with synthetic events: alarm fired,
+   stop pressed, wrong tag scanned, beacon lost, geofence exited, phone restarted mid-session. It
+   costs almost nothing precisely because `core/` is pure, and it is the only way to exercise the
+   failure paths that matter without waiting for them to happen for real.
+
+### Enforcing `core/` purity
+
+An ESLint `no-restricted-imports` zone rule, failing hard — **not** an advisory scan. It is the one
+convention whose violation silently destroys the architecture, and unlike most house rules it is
+trivially detectable statically.
+
+### What we take from approvals-app, and what we don't
+
+| | |
+| --- | --- |
+| **Take** | The `check-house-rules.mjs` pattern (advisory scan, always exits 0, surfaces what would otherwise be re-taught in review) · SHA-pinned third-party actions · `actionlint` · `dependabot` (especially: the native packages are young and fragile) · vitest |
+| **Later** | paths-filter and skip-duplicate-actions (scar tissue from a large repo; premature here) · knip |
+| **Leave** | Docker · the Postgres test harness · pwsh · Playwright and visual tests · CODEOWNERS · preview-db, schema-review, Vercel workflows |
+
+**Docker does not transfer.** The existing image is a long-lived Next worker host for Azure Container
+Apps. Anchor has no server. More decisively, **iOS builds cannot run in a container at all** — they
+need macOS and Xcode. The equivalent is EAS Build, or macOS runners at a 10× minute multiplier.
+
+**pwsh does not transfer.** In approvals-app it orchestrates real infrastructure — Azure databases,
+obfuscation, tenant copies — with Pester and PSScriptAnalyzer behind it. Anchor has no
+infrastructure. The remaining scripting need is one house-rules checker, which node runs natively.
+
+**Anchor needs one check approvals-app has no analogue for:** `expo-doctor`, which validates SDK and
+native dependency compatibility. Given two young native modules, that is a real gate.
+
+### CI shape (start here, grow later)
+
+On every PR, on ubuntu: `type-check` · `lint` (including the `core/` purity rule) · `test` ·
+`expo-doctor` · the advisory house-rules scan. **No device builds in CI initially** — macOS runners
+are expensive and EAS on demand is enough for a solo project.
+
+## 13. Deliberately out of scope
 
 Named so the audit does not treat them as gaps:
 
@@ -252,7 +302,7 @@ Named so the audit does not treat them as gaps:
 - **Payments, accounts, sync, cloud.** No server is a decision (D8), not an omission.
 - **Snooze.** Possibly never. Deferred pending real use.
 
-## 13. Open questions
+## 14. Open questions
 
 1. **Give-up window** for Feature A — 20 minutes of no interaction? Untested guess.
 2. **Should the re-arm delay escalate?** A flat 20s is the simple version; 20 → 15 → 10 makes
