@@ -61,8 +61,10 @@ default-keep novel findings unless disproved.
 - **Silencing a ringing alarm on anything less than a corroborated exit.** A bare region-exit event,
   a static `away` reading, or a stale fix must not stop an alarm. Only a fresh fix showing real
   distance beyond the radius qualifies — see the plan, §4 D3/D12.
-- **The dock alarm not resuming on re-entry.** Without it, stepping outside and walking back bypasses
-  Feature A completely — see the plan, §4 D13.
+- **The dock alarm not resuming on re-entry** (D13), or a wake-alarm exit-stop treated as permanent
+  rather than provisional (D26). Both rules are live: D13 governs a real departure, D26 catches a
+  confident-but-wrong fix.
+- **A tag registered to two roles** (D22), or role matching that consults the tag'''s place.
 - **A configurable home radius accepting a value below 100m.** iOS geofencing degrades below that,
   and the floor is what stops the radius becoming a one-tap escape hatch (D14).
 - **Dock session state held only in memory**, or rebuilt from alarm state rather than rehydrated from

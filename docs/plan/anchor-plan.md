@@ -178,17 +178,22 @@ Solo, LLM-assisted, learning Expo along the way. Working days, not calendar days
 
 | Phase | Days | Where the variance is |
 | --- | --- | --- |
-| 1 — alarm core | 4–7 | The AlarmKit bridge. Fine if it behaves; add a week if it needs forking |
-| 2 — places and geofencing | 2–3 | Permission handling, and testing it means repeatedly leaving the house |
-| 3 — Feature A | 1–2 | Mostly reuses Phase 1's machinery |
-| 4 — sessions and proximity | 3–5 | Second native module, plus tuning TX power by trial |
-| Polish | 2–3 | Open-ended by nature |
+| 1 — alarm core | 8–14 | Scaffold, Drizzle's bundled-migration dance, all of `core/` and its tests, the simulator, the harness, NFC, the AlarmKit spike, a SwiftUI widget extension, registration UI, escape hatch, occurrences, reconciliation — on a stack being learned |
+| 2 — places and geofencing | 3–5 | Permission handling, and testing means repeatedly leaving the house |
+| 3 — Feature A | 2–3 | Mostly reuses Phase 1's machinery |
+| 4 — sessions and proximity | 4–6 | Second native module, plus tuning TX power by trial |
+| Polish | 2–4 | Open-ended by nature |
 
-**Roughly 2–4 weeks full-time equivalent.**
+**Roughly 4–6 weeks full-time equivalent.**
 
-The estimate assumes current-generation assistance, which is not the same thing across the work.
-approvals-app's own history is the evidence: its first five months averaged ~127 commits a month and
-its last seven averaged ~490, on the same codebase and the same author.
+An earlier draft of this table said 2–4 weeks and was optimistic by roughly half. Phase 1 alone
+carries the entire foundation plus two native integrations, and `@bacons/apple-targets` is a day or
+two of yak-shaving the first time regardless of how well the logic goes.
+
+The estimate assumes current-generation assistance, but that multiplier has to be applied carefully.
+approvals-app's first five months averaged ~127 commits a month and its last seven averaged ~490 —
+but that measures velocity on a **familiar codebase in a familiar stack**, which is the opposite of
+Phase 1 here. Treat it as evidence about the specified-logic parts, not about the total.
 
 **Where that speed actually lands:** `core/` and its tests, the schema and migrations, golden traces,
 UI screens — anything already specified in this document, which is most of Phase 1 and 3. **Where it
@@ -207,10 +212,17 @@ most plausibly dies. Both are cheap to attempt and expensive to discover late, w
 argument for the ordering. The AlarmKit spike runs in the simulator with no account at all (§14), so
 there is no reason to defer it.
 
-**Nothing stops running Phase 1 on your own phone while the later phases are built** — D36
-guarantees there is something to run. It is the only way to learn whether walking to a tag actually
-gets you up, and that answer shapes how much the later phases need to do. Release is still
-all-or-nothing; using it early is not the same thing as shipping it.
+### The gate between Phase 1 and Phase 2
+
+**Use Phase 1 for a fortnight before starting Phase 2.** Not "it would be nice to" — an actual stop,
+with a duration.
+
+D36 guarantees the app *runs* at the end of every phase. It does not guarantee you *stop and use it*,
+and those are different things: the first is a build property, the second is the only way to learn
+whether walking to a tag actually gets you up. That answer shapes how much the later phases need to
+do, and it is unavailable from the code.
+
+Release is still all-or-nothing. Using it early is not shipping it.
 
 ## 4. Prior art
 
@@ -249,9 +261,9 @@ Each is load-bearing. Changing one changes the design.
 | D17 | A **resumed or proximity-broken** dock alarm vibrates and notifies first, sounding only after a user-set delay unless docked | Coming home at 01:00 should not blast sleeping housemates. It also downgrades a 03:00 proximity false positive from a siren to a vibration — the best available mitigation for the project's highest risk |
 | D18 | The re-arm delay **shortens with each cycle**, to a floor of ~10s | Stalling should get progressively worse rather than stay comfortable. The floor stops it becoming unsatisfiable — below roughly 10s you cannot cross a room before it fires again |
 | D19 | While any alarm alerts, location runs at **high accuracy**, capped at a few minutes from first ring | Makes D12 confirmation automatic with zero taps. The cap exists because D5 means an unanswered wake alarm rings forever, and unbounded GPS beside it would flatten the battery |
-| D20 | There is an **escape hatch**: a long-press-and-hold override that cancels any alarm and any session outright, logged and rate-limited | Illness, emergencies, and a lost or unreadable Tag B otherwise leave an alarm that literally cannot be stopped. An app that can trap its user is worse than one that can be cheated |
+| D20 | There is an **escape hatch**: a long-press-and-hold override that cancels any alarm and any session outright, logged and discouraged by **escalating friction** — never refused | Illness, emergencies, and a lost or unreadable Tag B otherwise leave an alarm that literally cannot be stopped. An app that can trap its user is worse than one that can be cheated |
 | D21 | D7's freeze covers **session duration and grace settings**, not just alarm times | The same reasoning as D7: these are the settings that would be edited in the moment rather than deliberately. No blanket freeze during a session — changing anything means walking to the phone, which is what the app wanted |
-| D22 | The two tag roles must hold **distinct UIDs**; registering one tag to both is rejected | One tag in both roles voids the entire premise, and it is a plausible setup mistake rather than an attack |
+| D22 | **A tag has exactly one role, everywhere.** Registering a tag already bound to the other role is rejected | Per-place roles would let a tag be dock at home and morning elsewhere — and since matching is by role, that tag would then clear the morning alarm *while sitting on the dock beside the bed*, which is the precise thing §2's two-tag split exists to prevent. Tags cost pennies; buy another rather than reuse one |
 | D23 | Schedules are **wall-clock local**, and a session's duration is **absolute elapsed time** | The alarm should fire at 07:00 on the clock in the room. Sessions must not gain or lose an hour at a DST boundary |
 | D24 | Bluetooth off at dock time **refuses to start a session**; switched off mid-session it **ends the session and records it** | Without Bluetooth the session genuinely cannot be enforced, and an app that says it is guarding something while doing nothing is lying. Say so at the start rather than fail quietly at 03:00 |
 | D25 | Every alarm occurrence records **whether it actually fired**, surfaced on the home screen | The worst failure is silent: a broken bridge means no alarm and no warning. An alarm app that fails quietly has actively harmed the user |
@@ -264,10 +276,10 @@ Each is load-bearing. Changing one changes the design.
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
 | D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
-| D38 | **Charging state vetoes a proximity alarm.** If the phone is still charging, it has not been picked up, whatever the beacon reports | Free and permissionless, and it attacks the highest-rated risk in the plan directly. It cannot replace the beacon — battery-state changes get no background execution, so only a region exit can wake the app — but as a veto it costs nothing |
-| D37 | **Every business rule has a test.** A rule in `core/` without one is unfinished, not merely untested | `core/` is pure and needs no mocking, so the excuse for skipping is absent. It is also the only surface verifiable without sleeping — an untested rule there will first be checked by experiencing it at 03:00 |
+| D35 | **For portable tags only**, a scan is accepted after **N steps since the alarm first rang** (`CMPedometer`, default ~15; can be switched on for fixed tags too) | A fixed tag in another room already required the walk, so the gate never binds there and could only ever fire when wrong — phone in a bag, a small flat, permission denied. A portable tag has no location at all, so steps are the *only* thing making it meaningful. Scoping it there is what keeps it from being the bypass-closing-for-its-own-sake §1 forbids |
 | D36 | **Every phase ends with a building, working app.** No phase may leave it half-wired | Each phase is additive over a working base, so stopping anywhere leaves something usable rather than a shell. It also keeps the seams honest — if adding places breaks the alarm, the layering was wrong, and that shows up at the end of the phase rather than at the end of the build |
-| D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set, default ~15) | Enough to prove you actually stood up, and no more. A portable tag scanned from bed accumulates zero steps, which is the case worth catching; a large N would just punish a small flat. Steps count from first ring, so stalling earns nothing |
+| D37 | **Every business rule has a test.** A rule in `core/` without one is unfinished, not merely untested | `core/` is pure and needs no mocking, so the excuse for skipping is absent. It is also the only surface verifiable without sleeping — an untested rule there will first be checked by experiencing it at 03:00 |
+| D38 | **Charging state vetoes a proximity alarm.** If the phone is still charging, it has not been picked up, whatever the beacon reports | Free and permissionless, and it attacks the highest-rated risk in the plan directly. It cannot replace the beacon — battery-state changes get no background execution, so only a region exit can wake the app — but as a veto it costs nothing |
 
 ## 6. The dock session
 
@@ -281,7 +293,7 @@ and stays gone past a debounce window, the dock alarm resumes. This is what make
 without it, docking at 20:00 and retrieving the phone at 20:05 defeats the whole feature.
 
 **The session has a user-set duration** — X hours from the moment it starts. It ends when that
-elapses, or on a confirmed exit from the home region, whichever comes first. It does **not** reference
+elapses, or on a confirmed exit from the active place, whichever comes first. It does **not** reference
 Feature B's alarm time: the features are independent (D10), Feature B may be disabled entirely, and a
 dock session must work with no morning alarm configured at all.
 
@@ -292,7 +304,7 @@ one-step bypass of the whole feature.
 **Proximity runs only while at home,** and is suspended from the moment Feature B starts alerting
 until the session ends (§2) — clearing the wake alarm ends any open session outright (D28). Without
 that, a session configured to run past the morning would trip a dock alarm minutes after you got up,
-while the phone was in your hand on the way to Tag B. Outside the home region there is no dock and
+while the phone was in your hand on the way to Tag B. Outside a known place there is no dock and
 nothing to enforce.
 
 ### The grace period
@@ -325,7 +337,7 @@ exists to solve.** The failure modes are real and must be designed for, not disc
 | --- | --- | --- |
 | Beacon battery dies mid-night | Silent — indistinguishable from "phone moved" | Warn on weakening signal; verify the beacon is visible *at dock time* and refuse to start a session without it |
 | BLE flapping at low TX power | Silent | Debounce: require N consecutive seconds of absence, not a single missed advertisement |
-| Bluetooth switched off | Detectable | Never treat as "phone left" — but refuse to start a session without it, and end a running session if it goes off (D24). Silently unenforcing turns one toggle into a complete bypass |
+| Bluetooth switched off | Detectable | Never treat as "phone left" — but refuse to start a session without it, and end a running session if it goes off (D24). Claiming to guard something while doing nothing is the failure here, not the toggle |
 | Phone at the edge of range | Silent | Tune beacon TX power so the boundary is well inside the room, not at the doorway. Charging state (D38) also vetoes: a phone still on the charger has not moved |
 
 **The bias throughout is toward silence.** Where proximity state is uncertain, do not ring. This is
@@ -365,7 +377,7 @@ nothing in a hotel. Features degrade per place rather than failing:
 | Dock tag + beacon | Feature A fully enforced |
 | Dock tag only | Feature A runs, but the dock session is unenforced — early docking is exploitable there, and the app should say so plainly when the place is set up |
 | Morning tag only | Feature B works normally |
-| Nothing registered | Unknown place: Feature A suppressed, Feature B degrades to dismissible (D9) |
+| Nothing registered | An *unfurnished* place — known location, no hardware. Feature A suppressed, Feature B degrades to dismissible (D9). This is **not** D4's `unknown` location, which means no fix at all and suppresses nothing |
 
 ### Portable tags
 
@@ -444,7 +456,7 @@ dock, and reboots at 05:00 has no geofencing until it is unlocked — which will
 user is asleep.
 
 The wake alarm should still fire. The location-dependent rules will not work until first unlock, and
-that is acceptable provided nothing depends on them *to ring*. Verified in build step 5, not assumed.
+that is acceptable provided nothing depends on them *to ring*. Verified in build step 8, not assumed.
 
 ### Both alarms ringing at once
 
@@ -457,7 +469,7 @@ also be flagged at configuration time, since it is almost always a mistake.
 
 Schedules are wall-clock local (D23): 07:00 means 07:00 on the clock in the room, including the day
 the clocks change. A session's duration is absolute elapsed time, so it neither gains nor loses an
-hour at the boundary. Crossing a timezone re-bases the schedule to local time; the home region does
+hour at the boundary. Crossing a timezone re-bases the schedule to local time; places do
 not move, so away-from-home behaviour (D9) applies as usual.
 
 ## 9. Stack
@@ -495,7 +507,7 @@ worth taking.
 
 **TX power is the one thing to get right.** A stock beacon reaches 10–70m and would cover the entire
 flat, enforcing nothing. The ESP32 floor of −12 dBm may still be too coarse for a single room; if
-build step 9 shows the boundary landing outside the doorway, a USB beacon with a −40 dBm floor
+build step 10 shows the boundary landing outside the doorway, a USB beacon with a −40 dBm floor
 (around £25) is the fix. Start cheap — step 10 exists precisely to measure this.
 
 **Agent tooling, set up before the first line of code:** Expo Skills (`github.com/expo/skills`), the
@@ -546,8 +558,8 @@ Rules that matter, stated so a test can be written against each:
 - A scanned tag clears **the alerting alarm whose role it matches** — not "the alarm currently
   ringing", since D10 allows both to alert at once. The dock tag presented to the wake alarm is
   rejected, and vice versa.
-- The two roles must hold distinct UIDs; registration rejects a tag already bound to the other role
-  (D22).
+- A tag's role is global and singular; registration rejects a tag already bound to the other role
+  (D22). A tag's place records where it is stuck, and never affects whether a scan matches.
 - An empty or unreadable UID **never matches**, so a failed read cannot become a dismissal.
 - `stopPressed` on an unsatisfied alarm schedules a fresh alarm `rearmDelay` later. The original fire
   time is preserved across re-arms, so the give-up window measures from when the alarm *first* rang.
@@ -578,7 +590,8 @@ Rules that matter, stated so a test can be written against each:
 - Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
   not alerting.
 - Uncertain proximity state never rings (§6) — but Bluetooth being off is refused at dock time and
-  ends a running session (D24), rather than silently leaving it unenforced.
+  ends a running session (D24), because a session that cannot be enforced should say so rather than
+  pretend.
 - A wake-alarm exit-stop is provisional: a confirmed return inside the window resumes it (D26).
 - The escape hatch cancels any alarm and session unconditionally, and is always available (D20).
 - A downgraded or missing Location Always permission blocks Feature A from arming rather than letting
@@ -590,13 +603,88 @@ Rules that matter, stated so a test can be written against each:
 SQLite via Drizzle. Kilobytes of data, but normalised properly — the cost of getting it right is
 minutes and the cost of getting it wrong is a migration on a device holding the only copy.
 
+### Shape
+
+```mermaid
+erDiagram
+    BEACONS ||--o{ PLACES : "serves (one carried between addresses)"
+    PLACES  ||--o{ TAGS : "holds (null place = portable)"
+    PLACES  ||--o{ SESSIONS : "hosts"
+    PLACES  ||--o{ OCCURRENCES : "where it fired"
+    ALARMS  ||--o{ ALARM_DAYS : "active on"
+    ALARMS  ||--o| DOCK_SETTINGS : "dock only"
+    ALARMS  ||--o{ OCCURRENCES : "each firing"
+    SESSIONS ||--o{ SESSION_EVENTS : "breaks and graces"
+
+    BEACONS {
+        int id PK
+        text proximity_uuid UK
+        int major UK
+        int minor UK
+        text label
+    }
+    PLACES {
+        int id PK
+        text name
+        real latitude
+        real longitude
+        int radius_m "CHECK >= 100"
+        int beacon_id FK "nullable"
+    }
+    TAGS {
+        int id PK
+        text uid UK "lowercase hex, the natural key"
+        text role "CHECK dock|morning - global to the tag"
+        int place_id FK "nullable = portable"
+        text label
+    }
+    ALARMS {
+        int id PK
+        text kind UK "CHECK dock|wake"
+        int hour "CHECK 0-23, wall clock"
+        int minute "CHECK 0-59"
+        int enabled
+    }
+    ALARM_DAYS {
+        int alarm_id PK-FK
+        int weekday PK "CHECK 0-6, rows not a bitmask"
+    }
+    DOCK_SETTINGS {
+        int alarm_id PK-FK
+        int session_hours
+        int grace_seconds
+    }
+    OCCURRENCES {
+        int id PK
+        int alarm_id FK
+        int due_at UK
+        int fired_at "nullable = missed"
+        int cleared_at "nullable"
+        text outcome "nullable"
+        int place_id FK "nullable"
+    }
+    SESSIONS {
+        int id PK
+        int place_id FK
+        int started_at
+        int ends_at
+        int ended_at "nullable = still open"
+        text end_reason "nullable"
+    }
+    SESSION_EVENTS {
+        int id PK
+        int session_id FK
+        text kind "proximity_lost|restored|grace_started|grace_expired"
+        int at
+    }
+```
+
 ### Tables
 
 ```
 places           id · name · latitude · longitude · radius_m · beacon_id? · created_at · updated_at
 beacons          id · proximity_uuid · major · minor · label · created_at · updated_at
-tags             id · uid · label · created_at · updated_at
-tag_roles        id · tag_id · role · place_id? · created_at
+tags             id · uid · role · place_id? · label · created_at · updated_at
 alarms           id · kind · hour · minute · enabled · created_at · updated_at
 alarm_days       alarm_id · weekday
 dock_settings    alarm_id · session_hours · grace_seconds · created_at · updated_at
@@ -608,9 +696,11 @@ app_settings     id(=1) · step_threshold · rearm_seconds · … · updated_at
 
 ### The decisions inside it
 
-**`tag_roles` is a junction, not columns on `tags`.** A physical tag has one identity and many jobs:
-dock at one place, morning at another, or portable and bound to none. Roles as columns would force
-one row per role per tag and duplicate the UID, which is the thing identity depends on.
+**Role lives on `tags`, and there is no junction.** A physical tag has exactly one job (D22) and is
+stuck in exactly one place — or none, if it is portable. A junction would allow dock-here and
+morning-there, and since matching is by role that tag would clear the morning alarm while lying on
+the dock beside the bed. `place_id` records where the tag is, for setup and for D33's per-place
+capability check; it never affects whether a scan matches.
 
 **Weekdays are rows, not a bitmask or a CSV string.** `alarm_days` is a junction with a composite
 primary key. A bitmask is unqueryable, unreadable in a dump, and breaks first normal form for the
@@ -635,8 +725,7 @@ TypeScript uses, so the two cannot drift.
 | | |
 | --- | --- |
 | `tags.uid` **unique** | One row per physical tag. UID is the natural key (D1) |
-| `tag_roles (tag_id, place_id)` **unique** | One tag cannot hold two roles at the same place (D22) |
-| Partial unique on `tag_roles(tag_id) where place_id is null` | SQLite treats NULLs as distinct, so the constraint above does **not** cover portable tags. Without this a portable tag could be both dock and morning |
+| `tags.role` **CHECK** `dock|morning`, one row per tag | A tag has exactly one role everywhere (D22). With role on the tag itself the old junction's NULL-vs-unique trap disappears entirely |
 | `beacons (proximity_uuid, major, minor)` **unique** | That triple *is* a beacon's identity |
 | `occurrences (alarm_id, due_at)` **unique** | Makes reconcile idempotent — re-running cannot double-insert |
 | Partial index `occurrences(due_at) where fired_at is null` | The D29 miss query, which runs on every launch |
@@ -758,19 +847,19 @@ the cost of getting proximity wrong is being woken at 03:00.
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
 | Beacon battery dies silently mid-session | **Eliminated by hardware choice** | Run the beacon off USB at the dock (§9). A mains-powered beacon has no battery to die. Verify-at-dock-time remains as a backstop for unplugging |
-| iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 9 measures the truth |
+| iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 10 measures the truth |
 | Two native modules now (AlarmKit + beacons) | Medium | Both are Expo-dev-build compatible; neither works in Expo Go |
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
 | The grace period becomes a repeatable bypass | **Accepted, not mitigated** | Judged unrealistic: repeatedly breaking proximity at home to farm five-minute windows is more effort than picking the phone up and ignoring the app. No cap; revisit only if it happens |
 | Session, alarm, and mirror state disagree after a crash | Medium, silent | Reconciliation (§12): SQLite holds intent, AlarmKit and the mirror are derived, reconcile idempotently on launch and foreground |
 | **Location Always silently downgraded to While Using** → every geofence rule fails quietly | Highest, and silent | Treat as a blocking state (§8): Feature A refuses to arm, home screen says so. Never degrade silently |
-| **The project is never finished** — four phases for a personal tool | Medium — largely defused by D36 | Every phase ends with a working app, so stopping at any point leaves something usable rather than a shell. Phase 1 is runnable on your own phone while the rest is built, and the two riskiest spikes sit as early as their dependencies allow |
+| **The project is never finished** — four phases for a personal tool | **High, and still the likeliest failure of all** | D36 makes every phase end in a working app, but a build property is not a habit: it guarantees something runs, not that it gets used. The mitigation with teeth is §3's fortnight gate between Phases 1 and 2 — an actual stop with a duration. The two riskiest spikes also sit as early as their dependencies allow |
 | **Step counting excludes wheelchair users** | Low personally, a real accessibility defect if shipped | D35 is the only proof-of-movement in the design. Shipping needs an alternative or an opt-out; for personal use it is acceptable, and recorded so it is not forgotten |
 | Motion & Fitness permission denied → no step gate | Medium | Fall back to tag-only enforcement and say so plainly. Never silently accept scans that should have been refused |
 | Phantom steps from a phone jostled in bed | Low | N is user-set; tune it upward if it happens. A handful of false steps will not reach a 20–30 step threshold |
 | Two addresses inside one 100m radius resolve to the same place | Medium | D14's floor makes them genuinely indistinguishable; treat them as one place rather than pretending otherwise |
 | iOS monitors at most **20 regions system-wide**, shared with every other app | Low at this scale | A handful of places is fine; worth remembering, not worth designing around |
-| The escape hatch becomes the normal way to dismiss | Medium | Deliberately awkward, logged, shown in history, rate-limited per week (D20) |
+| The escape hatch becomes the normal way to dismiss | Medium | Deliberately awkward, logged, shown in history, and progressively harder with repeated use — never refused, since a hard cap would reinstate the trap it exists to remove (D20, §8) |
 | DST or a timezone change shifts an alarm by an hour | Medium, silent, and annual | D23: wall-clock local schedules, absolute-elapsed sessions. Test explicitly — it is the classic alarm-app bug |
 | Force-quitting the app defeats re-arm | Accepted | Out of scope — the adversary is a sleepy user, not an attacker |
 
