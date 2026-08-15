@@ -186,6 +186,7 @@ location and no Bluetooth involved.
 | Tag matching on UID, empty never matches | D1, D22 |
 | A role accepts any of its registered tags | D31 |
 | Tags may be fixed or portable | D34 |
+| **In Phase 1 every tag is portable**, since places do not exist yet — so D35's step gate is universal here, not conditional | D34, D35 |
 | Scan accepted only after ~15 steps since first ring | D35 |
 | Re-arm on Stop | D2, D18 |
 | Never gives up | D5 |
@@ -481,6 +482,11 @@ that trade is made explicitly.
 The app needs AlarmKit authorisation, NFC, Bluetooth, Notifications, **Motion & Fitness** (D35), and
 **Location: Always**.
 
+**AlarmKit authorisation can be revoked in Settings** at any time, after which nothing fires and
+nothing says so — the precise silent failure D25 exists to catch, but with a cause the app can name
+exactly. Check it on every foreground, treat revocation as a blocking state on the home screen, and
+say which permission is missing rather than reporting a generic problem.
+
 Location Always is the fragile one. iOS may downgrade it to *While Using* — at the prompt, at the
 "still allowing?" re-prompt weeks later, or on reinstall. Every location-dependent rule (D3, D12,
 D19, D26, and the geofence gate on Feature A) **fails silently** when that happens.
@@ -616,17 +622,32 @@ reduce(state: State, event: Event, ctx: Context): { state: State; effects: Effec
 ```
 
 Pure, synchronous, total. **Everything it needs arrives in `ctx`** — `now`, the schedules, the tag
-registry, current presence, proximity, step count. No ambient clock, no imports, no I/O. That is what
-makes a golden trace reproducible.
+registry, presence, proximity, and `stepsSinceAlertStart`. No ambient clock, no imports, no I/O. That
+is what makes a golden trace reproducible.
+
+**Step counting can be unavailable, which is not the same as denied.** `CMPedometer` reports
+availability separately from authorisation — some devices simply cannot count. Both cases skip the
+gate and say so, but they are distinct states and the message should differ: one is fixable in
+Settings, the other never is.
+
+**`stepsSinceAlertStart` is the one field with a subtlety.** The step count is relative to when the
+alarm first rang, which lives in state — so the caller reads `state.alertingSince`, queries
+`CMPedometer` for that window, and passes the result in. The reducer never asks a question; it is
+handed the answer. Keeping that direction is what stops `ctx` needing an escape into I/O.
 
 | | |
 | --- | --- |
-| **State** | `idle` · `armed` · `alerting` · `gracing` · `docked` · `cleared` · `stoodDown(reason)` |
+| **State** | Both: `idle` · `armed` · `alerting` · `cleared` · `stoodDown(reason)`. Dock only: `docked` · `gracing` |
 | **Event** | `tick` · `alarmFired` · `stopPressed` · `tagScanned` · `presenceChanged` · `proximityChanged` · `escapeHatchUsed` |
 | **Effect** | `scheduleAlarm` · `cancelAlarm` · `startGrace` · `acceptScan` · `rejectScan(reason)` · `openSession` · `closeSession` · `notify` |
 
 `core/dock/` and `core/wake/` each own a reducer over this shared vocabulary. They do not share a
 state machine, and neither may read the other's state (D10).
+
+**`rejectScan` must carry a reason the UI shows.** `wrongRole` · `unknownTag` · `notEnoughSteps` ·
+`nothingAlerting`. Refusing a *correct* tag because the step count has not been reached, while saying
+only "wrong tag", is the worst feedback the app can give — it happens at 07:00, to someone holding
+the right object, with no way to work out what is wanted. `notEnoughSteps` should say how many more.
 
 **Effects are descriptions, never actions.** `reduce` returns `scheduleAlarm`; something outside
 `core/` performs it. This is why `core/` needs no mocking and why the same trace can be asserted in a
@@ -662,7 +683,10 @@ Nothing else in the app may import AlarmKit, and no `Platform.OS` check belongs 
 2. AlarmKit authorisation.
 3. **Register a tag** — D27 blocks enabling an alarm without one, so this cannot be skipped.
 4. Set the time.
-5. **Teach the escape hatch.**
+5. **Ask for Motion & Fitness**, with the reason. Phase 1 has no places, so every tag is portable and
+   the step gate applies to all of them — asking lazily means the permission dialog appears at 07:00
+   on top of a sounding alarm, which is both useless and the moment most likely to earn a refusal.
+6. **Teach the escape hatch.**
 
 Step 5 is not optional and not a tooltip. The first night with an unreadable tag is a trap unless the
 user already knows the override exists, and that is precisely the night they are least equipped to go
@@ -882,6 +906,58 @@ epoch milliseconds in UTC. Mixing the two is precisely how alarm apps drift by a
 The handful of values native code needs at alarm time go in an **App Group `UserDefaults`**, written
 through the native module. `@bacons/apple-targets` configures the App Group.
 
+### The occurrence lifecycle
+
+D29's miss detection is only as good as the rule for when rows exist, which is otherwise the kind of
+thing two phases would answer differently.
+
+**One-shot or native recurrence — decide this in the step 5 spike, not here.** It is a genuine
+trade-off and the plan should not pretend otherwise:
+
+| | One-shot per occurrence | AlarmKit `.weekly` recurrence |
+| --- | --- | --- |
+| "When does it fire" lives in | SQLite only | Two places — AlarmKit and `core/schedule.ts` |
+| Needs a materialised horizon | Yes | No |
+| Liveness dependency on the app running | Yes | No |
+| Timezone/DST recompute of future rows | Yes | The OS handles it |
+| Re-arms | Same object as a first firing | A one-shot grafted onto a recurring alarm |
+
+One-shot keeps a single source of truth, which is why the rest of this section assumes it. But it
+buys that by importing a horizon, a refill rule, and a recompute rule — three mechanisms that native
+recurrence simply does not need. **Measure both in step 5** and take the simpler one if recurrence
+proves reliable; the occurrence table stays either way, since it is the history and the watchdog
+regardless of who owns the schedule.
+
+- **A small horizon is materialised — the next two or three occurrences, not one and not infinity.**
+  One is tempting and wrong: one-shot scheduling means the app must run to create the next row, so a
+  phone that is off overnight misses tonight *and* never schedules tomorrow. That is a silent
+  cascade, and the alarm stays dead until the app happens to be opened. A horizon of a few gives
+  margin without letting unresolved future rows accumulate into noise for D29's query.
+- **The horizon is refilled on every reconcile**, so ordinary use keeps it topped up and an unusual
+  gap costs margin rather than correctness.
+- **The horizon is bounded by AlarmKit, not just by taste.** There is a system-managed per-app alarm
+  limit — the SDK exposes `AlarmManager.AlarmError.maximumLimitReached` — and two features each
+  holding a horizon consume it. Reconcile must handle that error rather than assume scheduling
+  succeeds, and treat it the same as any other reason an intended alarm does not exist: loudly.
+- **`fired_at IS NULL` means missed only once `due_at` is in the past.** The partial index is on
+  `due_at`, and the query is bounded by now.
+- **Disabling an alarm deletes its unresolved future occurrence.** Otherwise it is reported as missed
+  forever, from a night the user deliberately opted out of.
+- **Editing an alarm invalidates its unresolved future occurrences**, exactly as a timezone change
+  does. Changing 07:00 to 07:30 with a horizon already materialised otherwise leaves the old instants
+  scheduled and the new time purely cosmetic.
+- **A timezone change invalidates unresolved future occurrences and they are recomputed.** Schedules
+  are wall-clock (D23) but `due_at` is an absolute instant, so 07:00 materialised in London is the
+  wrong instant after landing in New York. D23 fixed this at the schedule level; the materialised
+  rows need the same treatment, on timezone change and on DST transition.
+- **Rows are never deleted once resolved.** They are the history, and the only evidence when a night
+  goes wrong.
+
+**What reconciliation compares.** Not occurrences against alarms — one alarm has many occurrences over
+its life. It compares **the set of unresolved occurrences whose `due_at` is in the future** against
+what `AlarmManager` actually has scheduled, and makes the latter match. That set is small and exact,
+which is what lets reconcile be idempotent.
+
 ### Durability, without a server
 
 The database lives in the app's Documents directory, so it is **included in iCloud and device backups
@@ -917,6 +993,17 @@ The design is therefore **reconciliation, not transaction**:
 - **Reconcile idempotently** on cold launch, on foreground, and after every alarm event: read desired
   state from the DB, read actual alarms from `AlarmManager.alarms`, make actual match desired.
   Running it twice must be harmless.
+
+**This depends on the bridge exposing a list-scheduled call, which is not guaranteed.** `AlarmManager`
+has `alarms` natively (§13 step 5 reads the SDK directly), but the community wrapper may only surface
+schedule and cancel. **Verify it in the step 5 spike** — reconciliation as designed is impossible
+without it.
+
+**The fallback if it is missing:** schedule by explicit UUID, taken from the occurrence row, and
+re-issue the whole desired set on every reconcile. Re-scheduling a known id overwrites rather than
+duplicates, which recovers idempotence without ever reading state back. It is strictly worse — a
+scheduled alarm the app does not know about can never be detected or cleaned up — so it is a fallback,
+not a preference.
 
 Use transactions for the SQLite writes regardless — session state and its event log should move
 together. That is necessary, just not sufficient.
@@ -1051,6 +1138,9 @@ the cost of getting proximity wrong is being woken at 03:00.
 | NFC Tag Reading and App Groups need a **paid account** (~$99/yr) | Blocks steps 4–7 | Core NFC returns *Sandbox restriction* on a Personal Team; `expo-alarm-kit` needs an App Group too, so the alarm path is double-gated |
 | **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 10 |
 | **False geofence exit silently stops the wake alarm** → overslept | Highest, and silent | D3: exit must be corroborated by a fresh fix; ambiguous → keep ringing. This is the risk D12 reintroduces and must be measured, not assumed |
+| **The bridge may not expose a list-scheduled call**, which reconciliation is built on | High, and architectural | Verify in the step 5 spike. A by-UUID re-issue fallback exists (§12) but is strictly worse — an alarm the app cannot see can never be cleaned up |
+| **AlarmKit's per-app alarm limit** bounds the materialised horizon | Medium | `AlarmError.maximumLimitReached` is a real SDK case; reconcile must handle it loudly rather than assume scheduling succeeds |
+| AlarmKit authorisation revoked in Settings → nothing fires, silently | High, and silent | Check on every foreground, block on the home screen, name the missing permission (§8) |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
 | Beacon battery dies silently mid-session | **Eliminated by hardware choice** | Run the beacon off USB at the dock (§9). A mains-powered beacon has no battery to die. Verify-at-dock-time remains as a backstop for unplugging |
@@ -1176,7 +1266,7 @@ output is then ours to control:
 | `lint` | eslint, including the `core/` purity rule |
 | `types` | `tsc --noEmit` against a check-only tsconfig |
 | `test` | vitest |
-| `doctor` | `expo-doctor` — SDK and native dependency compatibility |
+| `doctor` | `expo-doctor` — SDK and native dependency compatibility. **Network-dependent**, so it must degrade to a warning offline rather than failing the gate; a check that cannot run on a train is a check that gets bypassed |
 
 It runs the independent checks **concurrently**, groups each task's output under its own coloured
 tag rather than interleaving them, and closes with a duration-sorted timing summary so the slow step
@@ -1188,6 +1278,10 @@ is obvious. Spawned directly, with no shell-specific piping, so it behaves the s
   baseline** today, so adding it costs nothing now and blocks the next instance.
 - The house-rules scan is **advisory** — always exits 0, never gates. It surfaces conventions that
   would otherwise be re-taught in review, and it runs in `/house-review` and CI rather than here.
+  What it scans for: arbitrary Tailwind values (`p-[13px]`), more than one export per UI file, a
+  missing co-located `types.ts`, comments interleaved between fields of an object literal, and
+  `Platform.OS` outside `src/alarm/`. Each is text-detectable with acceptable noise; anything needing
+  type information belongs in review, not a regex.
 - **A rule with pre-existing violations belongs in the advisory scan, not the gate.** Putting it in
   the gate means either a permanently red build or a backlog nobody can clear, and both end with the
   gate being ignored.
