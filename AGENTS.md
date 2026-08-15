@@ -10,8 +10,10 @@ Follow it and the `docs/` guides it indexes. This file is a thin pointer kept in
 - **`src/core/` is pure** — no `expo-*`, `react-native`, `react`, or native imports. Behaviour rules
   live there or nowhere.
 - **Tag identity is the hardware UID, never the NDEF payload.** An empty UID never matches.
-- **Never gate the wake alarm on location.** Only bedtime is geo-gated.
+- **Presence may never stop the wake alarm ringing** — only downgrade it to dismissible when away.
 - **`unknown` presence is not `away`.**
+- **Uncertain proximity never rings** — the one place the app biases toward silence.
+- **Dock and wake are independent features.** Don't unify their handling.
 - **Never run prettier** — match existing style.
 - **Never invent an Expo or AlarmKit API from memory** — retrieve it (Expo MCP / llms.txt / the iOS
   SDK's `.swiftinterface`).

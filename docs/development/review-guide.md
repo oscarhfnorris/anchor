@@ -37,9 +37,12 @@ default-keep novel findings unless disproved.
 - **Re-arming an alarm the user just stopped.** This is the entire enforcement mechanism, not a bug.
   The system Stop button is deprecated-but-unremovable in iOS 26.1, so re-arm is the only option.
 - **The morning alarm having no give-up path.** Deliberate — see the plan, §4 D5.
-- **Duplicated-looking bedtime/wake handling.** They are genuinely different rules (one is
-  geo-gated and gives up, the other is neither). Do not "unify" them.
+- **Duplicated-looking dock/wake handling.** They are two independent features encoding genuinely
+  different rules (one is suppressible and gives up; the other degrades and never gives up). Do not
+  "unify" them — see the plan, §4 D10.
 - **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §4 D4.
+- **Proximity code declining to ring when the beacon state is ambiguous.** That is the intended bias,
+  not a missed case — see the plan, §5.
 - Unchanged lines — review the diff, not history.
 - Missing Android implementations. Deferred by the plan.
 
@@ -50,8 +53,14 @@ default-keep novel findings unless disproved.
   the architecture rests on.
 - **Comparing NDEF payload instead of hardware UID**, or an unnormalised UID comparison, or any path
   where an empty/failed read could match a registered tag.
-- **Location or presence affecting the wake alarm.** Bedtime only.
-- **Treating `unknown` presence as `away`** — it silently cancels alarms.
+- **Presence silencing the wake alarm.** It may downgrade it to dismissible when away; it may never
+  stop it ringing.
+- **Treating `unknown` presence as `away`** — it silently weakens enforcement.
+- **Proximity ringing on a single missed beacon advertisement**, or on Bluetooth being off, or
+  without a debounce window. This is the highest-severity defect class in the app: it wakes the user
+  at 03:00 for nothing.
+- **Cross-feature coupling between `core/dock/` and `core/wake/`** beyond the one documented
+  suspension rule. They are independent (plan §4 D10).
 - **Alarm-critical state written only to SQLite.** The iOS widget extension is a separate process and
   cannot read it; those values belong in the App Group `UserDefaults`.
 - **Behaviour rules implemented in `ui/` or a platform module** rather than `core/`. If it decides

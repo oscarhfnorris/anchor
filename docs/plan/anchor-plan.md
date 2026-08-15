@@ -15,25 +15,41 @@ Two failures at opposite ends of the same night:
 Both are solved by the same physical fact: **the phone is not where you are.** Anchor enforces that
 with alarms that can only be silenced somewhere else in the room, or the house.
 
-## 2. The loop
+## 2. Two features, not one flow
 
-Two NFC tags, deliberately separated.
+**This is the structural decision the rest of the design follows from.** Bedtime and morning are two
+independent alarms, each configured like a normal alarm app — its own time, its own weekdays, its own
+enable switch. Neither depends on the other having run.
 
-- **Tag A — the dock.** Across the room or in another room. Explicitly *not* the bedside table.
-- **Tag B — the morning target.** Bathroom, kettle, front door.
+### Feature A — Dock (evening)
 
-| Time | Behaviour | Clears on |
-| --- | --- | --- |
-| Bedtime (e.g. 22:30) | Alarm rings — only if inside the home region | **Tag A** |
-| Overnight | Phone rests at the dock | — |
-| Wake (e.g. 07:00) | Alarm fires **at the dock**, across the room | **Tag B** |
+| | |
+| --- | --- |
+| Fires | At its scheduled time, only when inside the home region |
+| Cleared by | **Tag A — the dock.** Across the room or in another room. Explicitly *not* the bedside table |
+| Then | The **dock session** begins: the phone must stay at the dock |
+| Gives up | After a period of no interaction at all |
+
+### Feature B — Wake (morning)
+
+| | |
+| --- | --- |
+| Fires | At its scheduled time, wherever the phone is |
+| Cleared by | **Tag B — the morning target.** Bathroom, kettle, front door |
+| Away from home | Degrades to a normal dismissible alarm (see §4 D9) |
+| Gives up | **Never** |
 
 **Why two tags.** If Tag A also cleared the morning alarm you would tap it while already standing at
 the dock and return to bed. The morning alarm's job is to get you out of the bedroom, so the tag that
 clears it must live outside the bedroom.
 
-**Why the bedtime alarm is an alarm and not a reminder.** A notification is dismissible from bed. The
-premise of the whole app is that the only accepted proof is physical presence at a specific object.
+**Why the evening one is an alarm and not a reminder.** A notification is dismissible from bed. The
+premise of the app is that the only accepted proof is physical presence at a specific object.
+
+**The one seam between the features.** Proximity enforcement must be suspended while the wake alarm
+is alerting, or carrying the phone to Tag B would trigger a "phone left the dock" alarm. This is the
+single point where the two features touch. It is named here rather than hidden because getting it
+wrong produces an alarm at exactly the wrong moment.
 
 ## 3. Prior art
 
@@ -42,26 +58,64 @@ Both halves exist separately. The pairing does not.
 - **Morning NFC alarms** — crowded: Tagdawn, Chirp O'Clock, Moti (iOS); Sleep as Android, NFC Alarm
   Clock (Android).
 - **Bedtime NFC-gated app blocking** — exists: Foqos, AppToken (iOS); UpDude (Android).
-- **An alarm that rings until the phone is docked away from the bed** — no product found.
+- **An alarm that rings until the phone is docked away from the bed, and keeps it there** — no
+  product found.
 
-This is a personal-use tool first. Shipping is a possible later outcome, not a design constraint now.
+Personal-use tool first. Shipping is a possible later outcome, not a design constraint now.
 
 ## 4. Decisions already made
 
-Each of these is load-bearing. Changing one changes the design.
+Each is load-bearing. Changing one changes the design.
 
 | # | Decision | Why |
 | --- | --- | --- |
-| D1 | Tag identity is the **hardware UID**, never the NDEF payload | An NDEF payload copies onto a spare sticker kept under the pillow, defeating the premise |
+| D1 | Tag identity is the **hardware UID**, never the NDEF payload | A payload copies onto a spare sticker kept under the pillow, defeating the premise |
 | D2 | Enforcement is **re-arm**, not block | `stopButton` is deprecated in iOS 26.1 ("not used anymore"); the Stop button is system-owned and cannot be removed |
-| D3 | Only the **bedtime** alarm is location-gated | A geofence glitch at 03:00 must never be able to cancel the alarm that wakes you |
-| D4 | `unknown` location is **not** `away` | Treating no-fix-yet as absence silently cancels the alarm |
-| D5 | Bedtime gives up after inactivity; **the wake alarm never gives up** | An alarm you can outlast is an alarm you learn to outlast |
+| D3 | Location gates *whether* an alarm enforces, never whether it **rings** for Feature B | A geofence glitch at 03:00 must not be able to cancel the alarm that wakes you |
+| D4 | `unknown` location is **not** `away` | Treating no-fix-yet as absence silently weakens enforcement |
+| D5 | Feature A gives up; **Feature B never does** | An alarm you can outlast is an alarm you learn to outlast |
 | D6 | Give-up is measured by **absence of interaction**, not motion sensing | iOS exposes no "user unlocked the phone" API; pressing Stop already proves presence, and costs no permission |
 | D7 | Settings freeze **±1 hour** around either alarm | Otherwise bedtime moves an hour later at 22:29 |
 | D8 | Everything on-device. **No server.** | No account, no sync, no privacy surface, nothing to run |
+| D9 | Away from home, Feature B **degrades rather than disappears** | Tag B is at home and unreachable. Suppressing the alarm means oversleeping; keeping it un-clearable means an alarm with no off switch |
+| D10 | The two features are **independent** | Each is configured like a normal alarm. Feature B fires whether or not you docked last night |
+| D11 | The dock session is **enforced by proximity**, not trust | Without it, early docking and "tap then pick it back up" are open loopholes |
 
-## 5. Stack
+## 5. The dock session
+
+Scanning Tag A starts a dock session — whether the alarm summoned you or you docked early.
+
+**Early docking is allowed and encouraged.** Scanning Tag A before the scheduled time cancels the
+pending alarm and starts the session immediately. Going to bed early should never be punished.
+
+**During the session**, a BLE beacon at the dock is monitored. If the phone leaves the beacon's range
+and stays gone past a debounce window, the dock alarm resumes. This is what makes early docking safe:
+without it, docking at 20:00 and retrieving the phone at 20:05 defeats the whole feature.
+
+**The session ends** at a configured "docked until" time, defaulting to Feature B's alarm time but
+stored independently (the features are independent — see D10). Proximity is also suspended while
+Feature B is alerting (§2).
+
+**Proximity runs only while at home.** Outside the home region there is no dock and nothing to
+enforce.
+
+### Why this is the riskiest part of the design
+
+A proximity false positive is an alarm at 03:00 for no reason — **worse than the problem the app
+exists to solve.** The failure modes are real and must be designed for, not discovered:
+
+| Mode | Detection difficulty | Handling |
+| --- | --- | --- |
+| Beacon battery dies mid-night | Silent — indistinguishable from "phone moved" | Warn on weakening signal; verify the beacon is visible *at dock time* and refuse to start a session without it |
+| BLE flapping at low TX power | Silent | Debounce: require N consecutive seconds of absence, not a single missed advertisement |
+| Bluetooth switched off | Detectable | Treat as `unknown`, never as "phone left" |
+| Phone at the edge of range | Silent | Tune beacon TX power so the boundary is well inside the room, not at the doorway |
+
+**The bias throughout is toward silence.** Where proximity state is uncertain, do not ring. This is
+the opposite of the bias everywhere else in the app, and deliberately so: a missed enforcement costs
+one night's discipline, a false positive costs a night's sleep and the user's trust in the app.
+
+## 6. Stack
 
 Chosen to maximise transfer to the existing Next/T3 work, and because Expo's first-party agent
 tooling is now good.
@@ -75,117 +129,139 @@ tooling is now good.
 | Alarm (iOS) | `expo-alarm-kit` or `react-native-nitro-ios-alarm-kit` | Community packages — pin exact versions |
 | Alarm UI (iOS) | `@bacons/apple-targets` → widget extension | `AlarmAttributes` is an `ActivityAttributes`, so this is mandatory |
 | NFC | `react-native-nfc-manager` | Covers both platforms |
+| Proximity | `react-native-beacon-radar` | iBeacon, Expo-compatible in a dev build, has background scanning |
 | Geofence | `expo-location` + TaskManager | Covers both platforms |
 | Payments (deferred) | RevenueCat | Only if this ever ships |
 
+**Hardware:** two NFC tags (NTAG215 stickers are fine) plus **one powered BLE beacon** with
+adjustable TX power at the dock. The adjustability is not optional — a stock beacon reaches 10–70m,
+which would cover the whole flat and enforce nothing.
+
 **Agent tooling, set up before the first line of code:** Expo Skills (`github.com/expo/skills`), the
 Expo MCP server (`docs.expo.dev/mcp`), and `llms.txt` so docs come from current Expo rather than
-model memory. SDK versions move fast enough that this matters more here than in a web repo.
+model memory.
 
-## 6. Architecture
+## 7. Architecture
 
 ```
 src/
   core/                  pure TS. imports nothing from expo-*, react-native, or react.
-    engine.ts              the night state machine
-    schedule.ts            next-occurrence arithmetic
+    dock/                  Feature A — schedule, alerting, session rules
+    wake/                  Feature B — schedule, alerting, degradation
     tags.ts                UID normalisation + role matching
+    schedule.ts            next-occurrence arithmetic (shared)
     lockout.ts             the ±1h settings freeze
   alarm/
     types.ts               the AlarmEngine interface — the platform seam
     engine.ios.ts          AlarmKit
     engine.android.ts      deferred; stub that throws
-  nfc/  geo/  db/          shared
+  proximity/  nfc/  geo/  db/    shared services
   ui/                      NativeWind screens
 targets/
   alarm-widget/            SwiftUI, iOS only
 ```
 
 **`core/` importing nothing platform-specific is the rule the whole design rests on.** It is the only
-part that encodes "can I cheat this?", it is the only part worth testing exhaustively, and it is the
-only part an Android build would reuse rather than rewrite.
+part that encodes "can I cheat this?", the only part worth testing exhaustively, and the only part an
+Android build would reuse rather than rewrite.
+
+**`core/dock/` and `core/wake/` are siblings, not a pipeline.** They share the tag registry, the
+schedule arithmetic, and the presence service — nothing else. The only cross-feature rule is the
+proximity suspension in §2, and it lives at the boundary, explicitly.
 
 **The seam.** React Native resolves `.ios.ts` / `.android.ts` automatically — no DI framework. Adding
 Android later means writing `engine.android.ts` plus one full-screen Activity, and touching nothing
 else.
 
-**Why the state machine can live in TypeScript.** Both platforms launch the app when an alarm is
-dismissed (iOS via launch-on-dismissal, Android via the full-screen intent). JS is running by the
-time the re-arm decision is needed. If that were not true the logic would have to be written twice in
-two native languages and kept in sync forever.
+**Why the logic can live in TypeScript.** Both platforms launch the app when an alarm is dismissed
+(iOS via launch-on-dismissal, Android via the full-screen intent). JS is running by the time the
+re-arm decision is needed. If that were not true the logic would have to be written twice in two
+native languages and kept in sync forever.
 
-## 7. State machine
+## 8. Behaviour rules
 
-States: `idle` → `bedtimeArmed` → `bedtimeAlerting` → `docked` → `wakeAlerting` → `released`, plus
-`stoodDown(reason)` for a suppressed night.
-
-Events: `tick`, `alarmFired`, `stopPressed`, `tagScanned`, `presenceChanged`.
-
-The rules that matter:
+Rules that matter, stated so a test can be written against each:
 
 - A scan is accepted only if the tag's **role matches the alarm currently ringing**. The dock tag
-  presented to the morning alarm is rejected (D-decision: see §4 D1 rationale and §2).
+  presented to the wake alarm is rejected.
+- An empty or unreadable UID **never matches**, so a failed read cannot become a dismissal.
 - `stopPressed` on an unsatisfied alarm schedules a fresh alarm `rearmDelay` later. The original fire
   time is preserved across re-arms, so the give-up window measures from when the alarm *first* rang.
-- `presenceChanged` may only affect `bedtimeArmed` / `bedtimeAlerting` / `stoodDown(awayFromHome)`.
-  It must not touch `docked` or `wakeAlerting` (§4 D3).
-- An empty scanned UID never matches, so a failed read cannot become a successful dismissal.
+- Presence may suppress Feature A entirely and may downgrade Feature B to dismissible. It may
+  **never** stop Feature B from ringing.
+- Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
+  not alerting.
+- Uncertain proximity state never rings (§5).
 
-## 8. Data model
+## 9. Data model
 
-Four tables, SQLite via Drizzle. Kilobytes total.
+SQLite via Drizzle. Kilobytes total.
 
 - `tags` — id, role (`dock` | `morning`), uid (hex), label, registered lat/lon, created_at
-- `schedules` — bedtime, wake, active weekdays, home region + radius, flags
-- `nights` — history: armed/docked/released timestamps, stand-down reason
-- `settings` — key/value
+- `alarms` — one row per feature: kind, time, active weekdays, enabled, feature-specific settings
+- `home_region` — centre, radius
+- `beacons` — uuid/major/minor, label, last_seen, last_rssi
+- `sessions` — dock session history: started, ended, how it ended, proximity breaks
+- `events` — alarm fired / stopped / scanned / stood down, for debugging why a night went wrong
 
 **One wrinkle.** The iOS widget extension runs in a separate process and cannot read the SQLite file.
 The handful of values native code needs at alarm time go in an **App Group `UserDefaults`**, written
 through the native module. `@bacons/apple-targets` configures the App Group.
 
-## 9. Build order
+## 10. Build order
 
-1. Repo conventions + agent tooling (this commit).
+1. Repo conventions + agent tooling (done).
 2. Expo app scaffold, dev client, prebuild, NativeWind, Drizzle. Prove it runs on device.
 3. `core/` + its tests, against a synthetic clock. No UI, no native.
 4. NFC read → show a UID on screen. Proves the capability and the provisioning.
-5. AlarmKit spike: schedule, fire, launch-on-dismissal. **The riskiest step — do it early.**
+5. **AlarmKit spike**: schedule, fire, launch-on-dismissal, re-arm. The riskiest step.
 6. Widget extension.
-7. Wire the loop end to end.
-8. Geofence gating.
-9. Settings lockout, history, UI polish.
+7. Feature B end to end (wake → Tag B). Simpler of the two; ship it working before starting A.
+8. Feature A without proximity (dock alarm → Tag A).
+9. **Proximity spike**: beacon at low TX power, measure real flapping over several nights *with
+   alarms disabled* before letting it ring anything.
+10. Dock sessions + early docking.
+11. Geofence gating and Feature B degradation.
+12. Settings lockout, history, UI polish.
 
-Steps 4 and 5 are where this project most plausibly dies. Both are cheap spikes. Do them before
-building anything that assumes they work.
+Steps 5 and 9 are where this project most plausibly dies. Both are cheap spikes. Do them before
+building anything that assumes they work — and note step 9 runs in observation mode first, because
+the cost of getting proximity wrong is being woken at 03:00.
 
-## 10. Risks
+## 11. Risks
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
 | NFC Tag Reading capability needs a **paid Apple Developer account** (~$99/yr) | Blocks everything | Confirm before step 2 |
+| **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 9 |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
-| Launch-on-dismissal may be too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
+| Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
+| Beacon battery dies silently mid-session | High | Verify beacon at dock time; warn on weakening signal |
+| iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 9 measures the truth |
+| Two native modules now (AlarmKit + beacons) | Medium | Both are Expo-dev-build compatible; neither works in Expo Go |
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
 | Force-quitting the app defeats re-arm | Accepted | Out of scope — the adversary is a sleepy user, not an attacker |
-| Geofence exit events are coarse (≥100m, latency) | Low | Radius ≥150m; re-evaluate on foreground |
 
-## 11. Deliberately out of scope
+## 12. Deliberately out of scope
 
 Named so the audit does not treat them as gaps:
 
 - **Android.** The seam exists; the implementation is deferred entirely.
-- **Overnight proximity / BLE beacon.** Once the phone is across the room the friction has done its
-  job. Revisit only if retrieval turns out to be a real habit.
-- **App blocking (FamilyControls).** Separate entitlement, weeks of Apple approval, and the physical
+- **App blocking (FamilyControls).** Separate entitlement, weeks of Apple approval, and physical
   separation is the actual mechanism.
-- **Payments, accounts, sync, cloud.** No server is a decision (§4 D8), not an omission.
+- **Payments, accounts, sync, cloud.** No server is a decision (D8), not an omission.
 - **Snooze.** Possibly never. Deferred pending real use.
 
-## 12. Open questions
+## 13. Open questions
 
-1. Give-up window length — 20 minutes of no interaction? Untested guess.
-2. Re-arm delay — 20s? Long enough to walk to the dock, short enough to be relentless.
-3. What happens if the dock tag is scanned *before* bedtime? Early docking should probably be
-   allowed and should cancel the pending alarm.
-4. What happens on a night where the wake alarm is never cleared — does the next bedtime still arm?
+1. **Give-up window** for Feature A — 20 minutes of no interaction? Untested guess.
+2. **Should the re-arm delay escalate?** A flat 20s is the simple version; 20 → 15 → 10 makes
+   stalling progressively worse. Unknown whether the added pressure is worth the added complexity.
+3. **Proximity debounce window** — how many consecutive seconds of absence before the alarm resumes?
+   Purely empirical; step 9 exists to answer it.
+4. **Does a dock session survive a phone restart or app force-quit?** If not, the loophole is
+   "restart the phone". If so, it needs state that outlives the process.
+5. **What ends a dock session that was never properly ended** — phone died, beacon died, user was
+   away? A session that never closes will corrupt the next night.
+6. **Should Feature A be suppressed on nights Feature B is disabled** (e.g. no alarm tomorrow)? They
+   are independent by D10, which argues no — but docking with no morning alarm may be unwanted.

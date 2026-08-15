@@ -20,10 +20,19 @@ file a pointer, so they stay in sync.
   sticker you keep by the bed, which defeats the entire premise of the app. Compare normalised
   lowercase hex, and treat an empty UID as never matching — a failed read must not become a
   successful dismissal.
-- **Never gate the wake alarm on location or presence.** Only the bedtime alarm is geo-gated. A
-  geofence glitch at 03:00 must not be able to cancel the alarm that wakes you.
-- **`unknown` presence is not `away`.** Only a positive "outside the home region" suppresses
-  anything. No-fix-yet, permission-denied, and stale-location all mean *keep the alarm*.
+- **Presence may never stop the wake alarm ringing.** It may suppress the dock alarm entirely, and it
+  may downgrade the wake alarm to normally dismissible when away from home (the morning tag is
+  unreachable there). It may never make the wake alarm silent. A geofence glitch at 03:00 must not be
+  able to cancel the alarm that wakes you.
+- **`unknown` presence is not `away`.** Only a positive "outside the home region" changes anything.
+  No-fix-yet, permission-denied, and stale-location all mean *keep the alarm*.
+- **Uncertain proximity never rings.** Everywhere else the app biases toward the alarm sounding;
+  proximity biases the opposite way. Beacon not seen, Bluetooth off, signal ambiguous — do not ring.
+  A missed enforcement costs one night's discipline; a false positive at 03:00 costs a night's sleep
+  and the user's trust in the app.
+- **The dock and wake features are independent.** They share the tag registry, schedule arithmetic
+  and presence service — nothing else. The single permitted coupling is suspending proximity while
+  the wake alarm alerts. Do not "unify" their handling; they encode genuinely different rules.
 - **One export per file** in UI code, named after its export (`tag-card.tsx`, `use-alarm.ts`).
   Shared types go in a co-located `types.ts`. Service/lib modules may group related exports.
 - **Spacing: 4-point system.** Tailwind/NativeWind scale utilities only (`gap-*`, `p-*`, `m-*`) — no
