@@ -45,6 +45,9 @@ default-keep novel findings unless disproved.
 - **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §4 D4.
 - **Proximity code declining to ring when the beacon state is ambiguous.** That is the intended bias,
   not a missed case — see the plan, §5.
+- **An open bypass that requires deliberate effort** — force-quit, reinstall, moving a tag, editing a
+  setting the night before. These work by design; the threat model is a tired person, not an attacker
+  (plan §1). "A determined user could…" is not a finding.
 - Unchanged lines — review the diff, not history.
 - Missing Android implementations. Deferred by the plan.
 
@@ -88,6 +91,10 @@ default-keep novel findings unless disproved.
 - Arbitrary spacing (`p-[13px]`) rather than the 4-point scale.
 - Duplicated logic that should be a shared, tested helper. **And the inverse:** a single-use helper
   extracted only to duck a lint metric — restructure inline instead. Extraction must earn itself.
+- **Anti-cheat machinery whose only justification is closing a loophole** (plan §1). Every such rule
+  needs an independent reason — correctness, honesty about degraded state, or not being annoying.
+  This is a real finding class, not a style note: it is how the design accretes complexity nobody
+  needs.
 - Comments interleaved between fields of an object or array literal.
 - New behaviour rule in `core/` with no test.
 

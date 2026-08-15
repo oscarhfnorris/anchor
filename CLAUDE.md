@@ -51,6 +51,21 @@ file a pointer, so they stay in sync.
 - **Never run prettier** (`--write` or `--check`). Match the surrounding style; formatting is
   manual/IDE.
 
+## Who this defends against
+
+**A tired person who wants better sleep, and nobody else.** Not an attacker, not a determined
+cheater. Read the plan's §1 before adding anything that closes a loophole.
+
+Bypasses that take deliberate effort — force-quitting, reinstalling, moving a tag next to the bed,
+changing a setting the night before — **work, and are not defects.** Someone doing that has decided
+not to use the app. Most bypasses are self-policing anyway, because carrying them out means picking
+up the phone, which is across the room.
+
+Every rule that closes a loophole must also have an independent reason to exist: correctness, honesty
+about degraded state, or not being annoying. **If bypass-closing is its only justification, do not
+add it** — say so instead and move on. Friction is aimed at ten seconds of grogginess; machinery that
+only stops a wide-awake, motivated person has no job here.
+
 ## Code comments
 
 Comment the *why*, not the *what* — design decisions and non-obvious rationale are valuable,

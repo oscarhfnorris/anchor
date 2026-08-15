@@ -15,6 +15,29 @@ Two failures at opposite ends of the same night:
 Both are solved by the same physical fact: **the phone is not where you are.** Anchor enforces that
 with alarms that can only be silenced somewhere else in the room, or the house.
 
+### Who this defends against
+
+**A tired person who wants better sleep, and nobody else.** Not an attacker, not a determined
+cheater, not a future stranger. The user is the person the app is helping, and they installed it on
+purpose.
+
+This is a scope brake, and it should be used as one:
+
+- **A bypass that takes deliberate effort is not a defect.** Force-quitting, reinstalling, shrinking
+  a radius the night before, unsticking a tag and moving it next to the bed — all of these work, and
+  none of them need fixing. Someone doing that has decided not to use the app, which is their right.
+- **Most bypasses are self-policing anyway.** Nearly every one requires picking up the phone, which
+  is across the room. Getting up to defeat the app is getting up.
+- **Setup honesty is the user's job.** Putting the dock on the far side of the room and the morning
+  tags in other rooms is discipline the app cannot supply and should not pretend to. It can only make
+  the honest setup work well.
+- **Friction is for the half-asleep, not the determined.** Ten seconds of grogginess is the whole
+  design target. Anything that only stops a wide-awake, motivated person is machinery with no job.
+
+Where a rule below closes a loophole, it should also have an independent reason to exist —
+correctness, honesty about degraded state, or not being annoying. If bypass-closing is its *only*
+justification, it is over-engineering and should be cut.
+
 ## 2. Two features, not one flow
 
 **This is the structural decision the rest of the design follows from.** Bedtime and morning are two
@@ -87,13 +110,12 @@ the house proves that more comprehensively than scanning Tag B ever could — th
 already met, so bringing it back would be punishing success.
 
 The dock alarm exists to get the phone onto the dock. Leaving the house does not achieve that at
-all; the obligation is simply outstanding. So it resumes on return, and without that resume
-"step out of the front door and back" would bypass the feature entirely.
+all, so the obligation is genuinely still outstanding when you walk back in, and the alarm should say
+so. That it also happens to close a loophole is a side effect, not the reason.
 
-**The radius is a difficulty dial, not just a geofence parameter.** It is user-configurable, floored
-at 100m because iOS geofencing degrades below that. Setting it small makes the wake alarm cheaper to
-escape; setting it large makes a genuine departure slower to register. The ±1h settings freeze (D7)
-covers it, so it cannot be shrunk at 06:55.
+**The radius is user-configurable, floored at 100m** because iOS geofencing is unreliable below
+that. Larger means a genuine departure takes longer to register. It is a tuning parameter, not a
+difficulty setting — see §1 on what this app is and is not defending against.
 
 ## 3. Prior art
 
@@ -125,18 +147,18 @@ Each is load-bearing. Changing one changes the design.
 | D10 | The two features are **independent** | Each is configured like a normal alarm. Feature B fires whether or not you docked last night |
 | D11 | The dock session is **enforced by proximity**, not trust | Without it, early docking and "tap then pick it back up" are open loopholes |
 | D12 | Leaving the active place while an alarm is alerting **stops it** — both features | The clearing tag is unreachable once you have left, and a phone screaming in public with no off switch is worse than a missed enforcement |
-| D13 | On return, the **dock alarm resumes** and the **wake alarm does not** | Their success conditions differ. Walking 150m from the house already proves you are awake and out of bed, so the wake alarm's goal is met. It does nothing to put the phone on the dock, so that obligation is still outstanding — and without the resume, "step outside and back" would bypass Feature A entirely |
-| D14 | A place's radius is **user-configurable**, floored at 100m | iOS geofencing degrades below 100m. Above that it is a difficulty dial: small is easier to escape, large is slower to register a real departure. D7's freeze stops it being shrunk at 06:55 |
-| D15 | The dock session **persists across restart and force-quit** | Otherwise "restart the phone" is a one-step bypass |
+| D13 | On return, the **dock alarm resumes** and the **wake alarm does not** | Their success conditions differ. Walking 150m from the house already proves you are awake and out of bed, so the wake alarm's goal is met. It does nothing to put the phone on the dock, so that obligation is genuinely still outstanding and the alarm should say so |
+| D14 | A place's radius is **user-configurable**, floored at 100m | iOS geofencing is unreliable below 100m, so the floor is a hardware limit rather than a policy. Above it, larger simply means a real departure takes longer to register |
+| D15 | The dock session **persists across restart and force-quit** | Phones reboot and apps get killed for reasons that have nothing to do with the user. A session that forgets itself on a crash is simply broken |
 | D16 | A session ends on **confirmed geofence exit, or a user-set duration** from its start — whichever first | It must not depend on Feature B's alarm time; B may be disabled entirely (D10). A session that never closes corrupts the following night |
 | D17 | A **resumed or proximity-broken** dock alarm vibrates and notifies first, sounding only after a user-set delay unless docked | Coming home at 01:00 should not blast sleeping housemates. It also downgrades a 03:00 proximity false positive from a siren to a vibration — the best available mitigation for the project's highest risk |
 | D18 | The re-arm delay **shortens with each cycle** | Stalling should get progressively worse, not stay comfortable |
 | D19 | While any alarm alerts, location runs at **high accuracy**, capped at a few minutes from first ring | Makes D12 confirmation automatic with zero taps. The cap exists because D5 means an unanswered wake alarm rings forever, and unbounded GPS beside it would flatten the battery |
 | D20 | There is an **escape hatch**: a long-press-and-hold override that cancels any alarm and any session outright, logged and rate-limited | Illness, emergencies, and a lost or unreadable Tag B otherwise leave an alarm that literally cannot be stopped. An app that can trap its user is worse than one that can be cheated |
-| D21 | D7's freeze covers **session duration and grace settings**, not just alarm times, and settings are frozen outright while a session is open | Otherwise shortening the session to one hour at 01:00 ends it early — a clean bypass through a setting that is not an "alarm time" |
+| D21 | D7's freeze covers **session duration and grace settings**, not just alarm times | The same reasoning as D7: these are the settings that would be edited in the moment rather than deliberately. No blanket freeze during a session — changing anything means walking to the phone, which is what the app wanted |
 | D22 | The two tag roles must hold **distinct UIDs**; registering one tag to both is rejected | One tag in both roles voids the entire premise, and it is a plausible setup mistake rather than an attack |
 | D23 | Schedules are **wall-clock local**, and a session's duration is **absolute elapsed time** | The alarm should fire at 07:00 on the clock in the room. Sessions must not gain or lose an hour at a DST boundary |
-| D24 | Bluetooth off at dock time **refuses to start a session**; switched off mid-session it **ends the session and records it** | Bias-to-silence is correct for ringing, but silently unenforcing turns "toggle Bluetooth" into a one-tap bypass. Refuse loudly at the start rather than fail quietly at 03:00 |
+| D24 | Bluetooth off at dock time **refuses to start a session**; switched off mid-session it **ends the session and records it** | Without Bluetooth the session genuinely cannot be enforced, and an app that says it is guarding something while doing nothing is lying. Say so at the start rather than fail quietly at 03:00 |
 | D25 | Every alarm occurrence records **whether it actually fired**, surfaced on the home screen | The worst failure is silent: a broken bridge means no alarm and no warning. An alarm app that fails quietly has actively harmed the user |
 | D26 | A D12 stop of the **wake** alarm is **provisional** for a few minutes — a confirmed return inside that window resumes it. High-accuracy location **runs for at least this window**, overriding D19's cap | D13 removed the safety net, so a confident-but-wrong fix would kill the alarm permanently. The override matters: if D19 dropped to coarse first, the corrective fix would never arrive and the provisional window would be decorative |
 | D27 | An alarm **cannot be enabled without its clearing tag registered**, and deleting a tag disables the alarm that depends on it | Otherwise the first night ends in an alarm nothing can clear. The deletion half matters just as much — the invariant is "an enabled alarm always has a way to be cleared", not merely a check at creation |
@@ -147,7 +169,7 @@ Each is load-bearing. Changing one changes the design.
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
 | D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
-| D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set N) | This, not the tag's location, is what proves you moved. A portable tag on the nightstand scanned from bed accumulates zero steps and is rejected — so portability costs nothing in enforcement. It strengthens fixed tags too |
+| D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set, default ~15) | Enough to prove you actually stood up, and no more. A portable tag scanned from bed accumulates zero steps, which is the case worth catching; a large N would just punish a small flat. Steps count from first ring, so stalling earns nothing |
 
 ## 5. The dock session
 
