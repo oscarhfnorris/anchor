@@ -135,6 +135,22 @@ never a half-wired intermediate. That is why the all-or-nothing release costs no
 anywhere leaves something usable, and the release date is a choice rather than the first point at
 which the thing runs.
 
+### Phase 0 — the template
+
+The scaffold everything sits in, and **the rules made enforceable before there is any code to violate
+them**. Build steps 1–2. No behaviour, no AlarmKit, no NFC, no Apple account.
+
+Three things must exist before the first line of `core/`, because each is trivial now and retroactive
+surgery later:
+
+- **The `core/` purity lint rule**, or `core/` acquires an `expo-sqlite` import and nobody notices for
+  a week.
+- **The test harness**, since D37 makes a rule without a test unfinished — the harness cannot lag the
+  rules it is supposed to gate.
+- **The `.ios.ts` / `.android.ts` seam**, so there is never a "just this once" `Platform.OS` in `ui/`.
+
+Full recipe in §13 step 2.
+
 ### Phase 1 — the alarm core
 
 Everything else sits on this. A morning alarm that only a registered tag can silence, with no
@@ -798,7 +814,48 @@ it queues. Serialising behind it wastes the wait; ignoring it risks building `co
 that never arrives.
 
 1. Repo conventions + agent tooling (done).
-2. Expo app scaffold, dev client, prebuild, NativeWind, Drizzle. Prove it runs on device.
+2. **Phase 0 — the template.** Scaffold, configure, and make the rules enforceable.
+
+   **Start from official scaffolding, not a hand-rolled tree:**
+
+   ```
+   npx create-expo-app@latest anchor --template default    # expo-router + TypeScript
+   npx expo install expo-dev-client expo-sqlite expo-location
+   npm i drizzle-orm
+   npm i -D drizzle-kit better-sqlite3 babel-plugin-inline-import vitest
+   npx expo prebuild                                        # native projects are generated, not committed
+   ```
+
+   **Do not use a community stack generator** (`create-expo-stack` and similar). They bundle opinions
+   that then have to be unpicked, and they lag SDK releases — which matters here because the whole
+   project targets iOS 26 and SDK-current native modules.
+
+   **Retrieve the current install steps for NativeWind and Drizzle rather than pasting remembered
+   ones.** Both change their setup between minor versions, and a stale `babel.config.js` or
+   `metro.config.js` fails as an unrelated-looking error. Use the Expo MCP server and `llms.txt` (§9),
+   not model memory.
+
+   **The five configuration points that are not obvious:**
+
+   | File | What and why |
+   | --- | --- |
+   | `metro.config.js` | `config.resolver.sourceExts.push('sql')` — omit it and migrations fail as a syntax error that reads like a bundler fault |
+   | `babel.config.js` | `['inline-import', { extensions: ['.sql'] }]` — there is no filesystem on device to read migrations from |
+   | `eslint.config.js` | `no-restricted-imports` over `src/core/**`, banning `expo*`, `react`, `react-native*` and the platform folders. Hard error, not advisory (§15) |
+   | `src/db/client.ts` | `PRAGMA foreign_keys = ON` on every connection. Drizzle will not do it and SQLite defaults to off |
+   | `test/db.ts` | The same pragma, plus the migrate-once / serialize / deserialize template (§15). FKs off in tests means violations pass locally and fail on device |
+
+   **Done when:** the app boots on device, NativeWind styles a screen, a Drizzle migration runs,
+   `npm test` passes, **and the purity rule has been proven to fire** by adding a deliberately
+   forbidden import to `core/` and watching the build break. A rule believed to be enforced but not
+   actually wired is worse than no rule.
+
+   The point of Drizzle here is that **one schema file drives both drivers** — `expo-sqlite` on
+   device, `better-sqlite3` in tests (§15). Without that the harness would be testing a different
+   schema from the one that ships.
+
+   Three things it does not do: enable foreign keys, offer `db:push` against a device (generate and
+   commit the SQL every time), or index foreign keys.
 
    **Drizzle on Expo needs migrations bundled as strings**, since there is no filesystem to read them
    from at runtime: `babel-plugin-inline-import` for `.sql`, `sql` pushed onto Metro's `sourceExts`,
