@@ -10,7 +10,8 @@ Follow it and the `docs/` guides it indexes. This file is a thin pointer kept in
 - **`src/core/` is pure** — no `expo-*`, `react-native`, `react`, or native imports. Behaviour rules
   live there or nowhere.
 - **Tag identity is the hardware UID, never the NDEF payload.** An empty UID never matches.
-- **Presence may never stop the wake alarm ringing** — only downgrade it to dismissible when away.
+- **Only a *confirmed* exit transition silences a ringing alarm** — corroborated by a fresh fix, and
+  resumed on re-entry. A static `away` reading may not; an uncorroborated exit leaves it ringing.
 - **`unknown` presence is not `away`.**
 - **Uncertain proximity never rings** — the one place the app biases toward silence.
 - **Dock and wake are independent features.** Don't unify their handling.

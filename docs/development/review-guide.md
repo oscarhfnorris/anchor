@@ -53,8 +53,11 @@ default-keep novel findings unless disproved.
   the architecture rests on.
 - **Comparing NDEF payload instead of hardware UID**, or an unnormalised UID comparison, or any path
   where an empty/failed read could match a registered tag.
-- **Presence silencing the wake alarm.** It may downgrade it to dismissible when away; it may never
-  stop it ringing.
+- **Silencing a ringing alarm on anything less than a corroborated exit.** A bare region-exit event,
+  a static `away` reading, or a stale fix must not stop an alarm. Only a fresh fix showing real
+  distance beyond the radius qualifies — see the plan, §4 D3/D12.
+- **A D12 exit-stop with no resume-on-re-entry.** Without D13, stepping outside and walking back is a
+  complete bypass of the app.
 - **Treating `unknown` presence as `away`** — it silently weakens enforcement.
 - **Proximity ringing on a single missed beacon advertisement**, or on Bluetooth being off, or
   without a debounce window. This is the highest-severity defect class in the app: it wakes the user

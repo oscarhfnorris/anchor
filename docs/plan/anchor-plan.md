@@ -51,6 +51,27 @@ is alerting, or carrying the phone to Tag B would trigger a "phone left the dock
 single point where the two features touch. It is named here rather than hidden because getting it
 wrong produces an alarm at exactly the wrong moment.
 
+### Leaving while an alarm is ringing
+
+**A confirmed exit from the home region stops any alarm currently alerting.** Both features. If you
+have left the house, the tag that would clear the alarm is unreachable, and a phone screaming in
+public with no way to silence it is a worse outcome than a missed enforcement.
+
+Two conditions make this safe rather than a loophole:
+
+- **The exit must be confirmed, not merely reported.** A region-exit event alone is not enough — GPS
+  drifts indoors, and a spurious exit at 07:00 would silently cancel the alarm and let you oversleep.
+  Corroborate with a fresh fix showing real distance beyond the radius. **If the fix is unavailable
+  or ambiguous, keep ringing.** This is the same bias as everywhere else in the app except proximity.
+- **Re-entering resumes it.** If the alarm's active window has not expired, returning inside the
+  region brings the alarm back. Without this, "walk out of the front door and back" is a complete
+  bypass of the entire app.
+
+**Why stepping outside is not a shortcut.** The home radius is at least 150m and iOS debounces exit
+events. Satisfying this deliberately means walking a hundred-odd metres down the street, in the
+state you woke up in, with the alarm going the whole way — and then it resumes when you come back.
+That is strictly more effort than walking to the bathroom, which is the entire point.
+
 ## 3. Prior art
 
 Both halves exist separately. The pairing does not.
@@ -71,7 +92,7 @@ Each is load-bearing. Changing one changes the design.
 | --- | --- | --- |
 | D1 | Tag identity is the **hardware UID**, never the NDEF payload | A payload copies onto a spare sticker kept under the pillow, defeating the premise |
 | D2 | Enforcement is **re-arm**, not block | `stopButton` is deprecated in iOS 26.1 ("not used anymore"); the Stop button is system-owned and cannot be removed |
-| D3 | Location gates *whether* an alarm enforces, never whether it **rings** for Feature B | A geofence glitch at 03:00 must not be able to cancel the alarm that wakes you |
+| D3 | Only a **confirmed exit transition** may silence a ringing alarm. A static "presence says away" reading may not, and `unknown` never may | A geofence glitch at 03:00 must not be able to cancel the alarm that wakes you. Requiring a corroborated transition keeps that protection while allowing the deliberate case (D12) |
 | D4 | `unknown` location is **not** `away` | Treating no-fix-yet as absence silently weakens enforcement |
 | D5 | Feature A gives up; **Feature B never does** | An alarm you can outlast is an alarm you learn to outlast |
 | D6 | Give-up is measured by **absence of interaction**, not motion sensing | iOS exposes no "user unlocked the phone" API; pressing Stop already proves presence, and costs no permission |
@@ -80,6 +101,8 @@ Each is load-bearing. Changing one changes the design.
 | D9 | Away from home, Feature B **degrades rather than disappears** | Tag B is at home and unreachable. Suppressing the alarm means oversleeping; keeping it un-clearable means an alarm with no off switch |
 | D10 | The two features are **independent** | Each is configured like a normal alarm. Feature B fires whether or not you docked last night |
 | D11 | The dock session is **enforced by proximity**, not trust | Without it, early docking and "tap then pick it back up" are open loopholes |
+| D12 | Leaving the home region while an alarm is alerting **stops it** — both features | The clearing tag is unreachable once you have left, and a phone screaming in public with no off switch is worse than a missed enforcement |
+| D13 | Re-entering the region **resumes** a D12-stopped alarm, if its window has not expired | Otherwise "step outside and come back" bypasses the entire app |
 
 ## 5. The dock session
 
@@ -187,8 +210,11 @@ Rules that matter, stated so a test can be written against each:
 - An empty or unreadable UID **never matches**, so a failed read cannot become a dismissal.
 - `stopPressed` on an unsatisfied alarm schedules a fresh alarm `rearmDelay` later. The original fire
   time is preserved across re-arms, so the give-up window measures from when the alarm *first* rang.
-- Presence may suppress Feature A entirely and may downgrade Feature B to dismissible. It may
-  **never** stop Feature B from ringing.
+- Presence may suppress Feature A entirely and may downgrade Feature B to dismissible.
+- A **confirmed exit transition** while alerting stops the alarm (D12); re-entry resumes it inside
+  its window (D13). A static `away` reading may not silence a ringing alarm, and `unknown` never may.
+- An exit is confirmed only by a fresh fix showing real distance beyond the radius. An exit event
+  that cannot be corroborated leaves the alarm ringing.
 - Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
   not alerting.
 - Uncertain proximity state never rings (§5).
@@ -234,6 +260,7 @@ the cost of getting proximity wrong is being woken at 03:00.
 | --- | --- | --- |
 | NFC Tag Reading capability needs a **paid Apple Developer account** (~$99/yr) | Blocks everything | Confirm before step 2 |
 | **Proximity false positive rings at 03:00** | Highest — worse than the original problem | Debounce, bias-to-silence, observation-only period in step 9 |
+| **False geofence exit silently stops the wake alarm** → overslept | Highest, and silent | D3: exit must be corroborated by a fresh fix; ambiguous → keep ringing. This is the risk D12 reintroduces and must be measured, not assumed |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
 | Beacon battery dies silently mid-session | High | Verify beacon at dock time; warn on weakening signal |
@@ -315,3 +342,9 @@ Named so the audit does not treat them as gaps:
    away? A session that never closes will corrupt the next night.
 6. **Should Feature A be suppressed on nights Feature B is disabled** (e.g. no alarm tomorrow)? They
    are independent by D10, which argues no — but docking with no morning alarm may be unwanted.
+7. **How long is the D13 resume window?** Leave at 07:00, return at 07:20 — does the wake alarm come
+   back? At 09:00, presumably not. The boundary is undecided and it is the difference between a
+   working rule and an exploitable one.
+8. **How fast is a confirmed exit in practice?** D12 is only usable if a genuine departure silences
+   the alarm within a minute or two. If iOS takes ten minutes to confirm, the rule is decorative and
+   the alarm rings all the way down the street anyway. Measurable in build step 11.

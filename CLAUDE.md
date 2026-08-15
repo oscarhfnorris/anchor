@@ -20,12 +20,13 @@ file a pointer, so they stay in sync.
   sticker you keep by the bed, which defeats the entire premise of the app. Compare normalised
   lowercase hex, and treat an empty UID as never matching — a failed read must not become a
   successful dismissal.
-- **Presence may never stop the wake alarm ringing.** It may suppress the dock alarm entirely, and it
-  may downgrade the wake alarm to normally dismissible when away from home (the morning tag is
-  unreachable there). It may never make the wake alarm silent. A geofence glitch at 03:00 must not be
-  able to cancel the alarm that wakes you.
-- **`unknown` presence is not `away`.** Only a positive "outside the home region" changes anything.
-  No-fix-yet, permission-denied, and stale-location all mean *keep the alarm*.
+- **Only a confirmed exit transition may silence a ringing alarm.** Leaving the home region while an
+  alarm alerts stops it, and returning resumes it inside its window. But "confirmed" is load-bearing:
+  a region-exit event must be corroborated by a fresh fix showing real distance beyond the radius. A
+  static `away` reading may not silence a ringing alarm, and an uncorroborated exit leaves it
+  ringing. A GPS glitch at 07:00 must not be able to cancel the alarm silently.
+- **`unknown` presence is not `away`.** Only a positive, corroborated "outside the home region"
+  changes anything. No-fix-yet, permission-denied, and stale-location all mean *keep the alarm*.
 - **Uncertain proximity never rings.** Everywhere else the app biases toward the alarm sounding;
   proximity biases the opposite way. Beacon not seen, Bluetooth off, signal ambiguous — do not ring.
   A missed enforcement costs one night's discipline; a false positive at 03:00 costs a night's sleep
