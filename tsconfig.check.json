@@ -1,0 +1,14 @@
+{
+  // The gate's type-check. The app's own tsconfig.json targets the app; this widens the net to the
+  // harness, the scripts and the config files, so `type-check` cannot pass green while the things
+  // the gate depends on are broken.
+  "extends": "./tsconfig.json",
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": ["node_modules", "ios", "android", "dist", ".expo", "src/db/migrations"]
+}
