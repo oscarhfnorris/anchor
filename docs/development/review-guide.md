@@ -36,15 +36,17 @@ default-keep novel findings unless disproved.
 
 - **Re-arming an alarm the user just stopped.** This is the entire enforcement mechanism, not a bug.
   The system Stop button is deprecated-but-unremovable in iOS 26.1, so re-arm is the only option.
-- **The morning alarm having no give-up path.** Deliberate — see the plan, §4 D5.
+- **The morning alarm having no give-up path.** Deliberate — see the plan, §5 D5.
+- **The step gate not applying to fixed tags.** Scoped to portable tags on purpose (D35) — a fixed tag
+  already required the walk, so the gate there could only fire when wrong.
 - **Duplicated-looking dock/wake handling.** They are two independent features encoding genuinely
   different rules (one is suppressible, gives up, and resumes on re-entry; the other degrades, never
-  gives up, and does not resume). Do not "unify" them — see the plan, §4 D10 and D13.
+  gives up, and does not resume). Do not "unify" them — see the plan, §5 D10 and D13.
 - **The dock/wake asymmetry on re-entry.** Deliberate, and derived from their different success
-  conditions — see the plan, §4 D13. Not an oversight in whichever branch you read second.
-- **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §4 D4.
+  conditions — see the plan, §5 D13. Not an oversight in whichever branch you read second.
+- **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §5 D4.
 - **Proximity code declining to ring when the beacon state is ambiguous.** That is the intended bias,
-  not a missed case — see the plan, §5.
+  not a missed case — see the plan, §6.
 - **An open bypass that requires deliberate effort** — force-quit, reinstall, moving a tag, editing a
   setting the night before. These work by design; the threat model is a tired person, not an attacker
   (plan §1). "A determined user could…" is not a finding.
@@ -60,17 +62,18 @@ default-keep novel findings unless disproved.
   where an empty/failed read could match a registered tag.
 - **Silencing a ringing alarm on anything less than a corroborated exit.** A bare region-exit event,
   a static `away` reading, or a stale fix must not stop an alarm. Only a fresh fix showing real
-  distance beyond the radius qualifies — see the plan, §4 D3/D12.
+  distance beyond the radius qualifies — see the plan, §5 D3/D12.
 - **The dock alarm not resuming on re-entry** (D13), or a wake-alarm exit-stop treated as permanent
   rather than provisional (D26). Both rules are live: D13 governs a real departure, D26 catches a
   confident-but-wrong fix.
-- **A tag registered to two roles** (D22), or role matching that consults the tag'''s place.
-- **A configurable home radius accepting a value below 100m.** iOS geofencing degrades below that,
-  and the floor is what stops the radius becoming a one-tap escape hatch (D14).
+- **A tag registered to two roles** (D22), or role matching that consults the tag's place.
+- **A configurable place radius accepting a value below 100m.** iOS geofencing degrades below that,
+  and the floor is a hardware limit rather than a policy (D14).
 - **Dock session state held only in memory**, or rebuilt from alarm state rather than rehydrated from
   the sessions table on cold launch (D15).
-- **A resumed or proximity-broken dock alarm sounding without the grace period** (D17), or a grace
-  that can be restarted indefinitely with no per-session cap.
+- **A resumed or proximity-broken dock alarm sounding without the grace period** (D17). Note there is
+  deliberately **no** per-session cap on graces — that was judged unrealistic (§14), so its absence is
+  not a finding.
 - **Either feature reading the other's schedule or enabled state** (D10). Each must work alone.
 - **A change that leaves the app non-functional pending a later phase** (D36). Half-wired code that
   only makes sense once the next phase lands is a defect now, not a promise.
@@ -81,7 +84,7 @@ default-keep novel findings unless disproved.
   without a debounce window. This is the highest-severity defect class in the app: it wakes the user
   at 03:00 for nothing.
 - **Cross-feature coupling between `core/dock/` and `core/wake/`** beyond the one documented
-  suspension rule. They are independent (plan §4 D10).
+  suspension rule. They are independent (plan §5 D10).
 - **Alarm-critical state written only to SQLite.** The iOS widget extension is a separate process and
   cannot read it; those values belong in the App Group `UserDefaults`.
 - **Behaviour rules implemented in `ui/` or a platform module** rather than `core/`. If it decides
