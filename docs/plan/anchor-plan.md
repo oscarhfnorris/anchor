@@ -58,7 +58,8 @@ This is a scope brake, and it should be used as one:
 - **Most bypasses are self-policing anyway.** Nearly every one requires picking up the phone, which
   is across the room. Getting up to defeat the app is getting up.
 - **Setup honesty is the user's job.** Putting the dock on the far side of the room and the morning
-  tags in other rooms is discipline the app cannot supply and should not pretend to. It can only make
+  tags in other rooms is discipline the app cannot supply and should not pretend to. It can only
+make
   the honest setup work well.
 - **Friction is for the half-asleep, not the determined.** Ten seconds of grogginess is the whole
   design target. Anything that only stops a wide-awake, motivated person is machinery with no job.
@@ -70,7 +71,8 @@ justification, it is over-engineering and should be cut.
 ## 2. Two features, not one flow
 
 **This is the structural decision the rest of the design follows from.** Bedtime and morning are two
-independent alarms, each configured like a normal alarm app — its own time, its own weekdays, its own
+independent alarms, each configured like a normal alarm app — its own time, its own weekdays, its
+own
 enable switch. Neither depends on the other having run.
 
 ### Feature A — Dock (evening)
@@ -92,7 +94,8 @@ enable switch. Neither depends on the other having run.
 | Gives up | **Never** |
 
 **Why two tags.** If Tag A also cleared the morning alarm you would tap it while already standing at
-the dock and return to bed. The morning alarm's job is to get you out of the bedroom, so the tag that
+the dock and return to bed. The morning alarm's job is to get you out of the bedroom, so the tag
+that
 clears it must live outside the bedroom.
 
 **Why the evening one is an alarm and not a reminder.** A notification is dismissible from bed. The
@@ -122,7 +125,8 @@ Waiting on iOS's own region-exit debounce would leave the alarm ringing all the 
 polling directly is what makes the rule usable rather than decorative.
 
 **It must be bounded, because the wake alarm never gives up (D5).** "Only while an alarm sounds" is
-not self-limiting: an unanswered wake alarm rings indefinitely, and continuous high-accuracy location
+not self-limiting: an unanswered wake alarm rings indefinitely, and continuous high-accuracy
+location
 alongside it would drain the battery flat — on the one morning nobody is there to notice. Cap the
 high-accuracy window at a few minutes from first ring, then fall back to coarse monitoring. A
 departure that has not happened in the first few minutes is not the case this rule exists for.
@@ -139,7 +143,8 @@ the house proves that more comprehensively than scanning Tag B ever could — th
 already met, so bringing it back would be punishing success.
 
 The dock alarm exists to get the phone onto the dock. Leaving the house does not achieve that at
-all, so the obligation is genuinely still outstanding when you walk back in, and the alarm should say
+all, so the obligation is genuinely still outstanding when you walk back in, and the alarm should
+say
 so. That it also happens to close a loophole is a side effect, not the reason.
 
 **The radius is user-configurable, floored at 100m** because iOS geofencing is unreliable below
@@ -162,10 +167,12 @@ which the thing runs.
 
 ### Phase 0 — the template
 
-The scaffold everything sits in, and **the rules made enforceable before there is any code to violate
+The scaffold everything sits in, and **the rules made enforceable before there is any code to
+violate
 them**. Build steps 1–2. No behaviour, no AlarmKit, no NFC, no Apple account.
 
-Three things must exist before the first line of `core/`, because each is trivial now and retroactive
+Three things must exist before the first line of `core/`, because each is trivial now and
+retroactive
 surgery later:
 
 - **The `core/` purity lint rule**, or `core/` acquires an `expo-sqlite` import and nobody notices for
@@ -199,7 +206,8 @@ location and no Bluetooth involved.
 
 ### Phase 2 — places and geofencing
 
-Places (D30, D32, D33), the exit rules (D3, D12, D13, D19, D26), away-from-home degradation (D9), and
+Places (D30, D32, D33), the exit rules (D3, D12, D13, D19, D26), away-from-home degradation (D9),
+and
 the configurable radius (D14). Needs Phase 1's alarm lifecycle to attach to.
 
 ### Phase 3 — Feature A, the evening alarm
@@ -233,18 +241,22 @@ carries the entire foundation plus two native integrations, and `@bacons/apple-t
 two of yak-shaving the first time regardless of how well the logic goes.
 
 The estimate assumes current-generation assistance, but that multiplier has to be applied carefully.
-a mature repo in the same TypeScript stack averaged ~127 commits a month over its first five and ~490 over its last seven —
+a mature repo in the same TypeScript stack averaged ~127 commits a month over its first five and
+~490 over its last seven —
 but that measures velocity on a **familiar codebase in a familiar stack**, which is the opposite of
 Phase 1 here. Treat it as evidence about the specified-logic parts, not about the total.
 
 **Where that speed actually lands:** `core/` and its tests, the schema and migrations, golden traces,
 UI screens — anything already specified in this document, which is most of Phase 1 and 3. **Where it
-does not:** debugging a community native bridge that misbehaves, tuning beacon TX power by trial, and
+does not:** debugging a community native bridge that misbehaves, tuning beacon TX power by trial,
+and
 anything requiring a device in a place. Phase 4 barely moves.
 
 **Some of it cannot be compressed by working harder.** The AlarmKit entitlement sits in a queue of
-unknown length. Proximity needs one to two weeks of *nights* in observation mode before it is allowed
-to ring anything. Geofence behaviour can only be checked by actually going out and coming back. Those
+unknown length. Proximity needs one to two weeks of *nights* in observation mode before it is
+allowed
+to ring anything. Geofence behaviour can only be checked by actually going out and coming back.
+Those
 are calendar time, not effort, and they run in parallel with other phases rather than blocking them.
 
 ### The two phases that decide whether this works
@@ -259,7 +271,8 @@ there is no reason to defer it.
 **Use Phase 1 for a fortnight before starting Phase 2.** Not "it would be nice to" — an actual stop,
 with a duration.
 
-D36 guarantees the app *runs* at the end of every phase. It does not guarantee you *stop and use it*,
+D36 guarantees the app *runs* at the end of every phase. It does not guarantee you *stop and use
+it*,
 and those are different things: the first is a build property, the second is the only way to learn
 whether walking to a tag actually gets you up. That answer shapes how much the later phases need to
 do, and it is unavailable from the code.
@@ -331,12 +344,15 @@ Scanning Tag A starts a dock session — whether the alarm summoned you or you d
 pending alarm and starts the session immediately. Going to bed early should never be punished.
 
 **During the session**, a BLE beacon at the dock is monitored. If the phone leaves the beacon's range
-and stays gone past a debounce window, the dock alarm resumes. This is what makes early docking safe:
+and stays gone past a debounce window, the dock alarm resumes. This is what makes early docking
+safe:
 without it, docking at 20:00 and retrieving the phone at 20:05 defeats the whole feature.
 
 **The session has a user-set duration** — X hours from the moment it starts. It ends when that
-elapses, or on a confirmed exit from the active place, whichever comes first. It does **not** reference
-Feature B's alarm time: the features are independent (D10), Feature B may be disabled entirely, and a
+elapses, or on a confirmed exit from the active place, whichever comes first. It does **not**
+reference
+Feature B's alarm time: the features are independent (D10), Feature B may be disabled entirely, and
+a
 dock session must work with no morning alarm configured at all.
 
 **The session survives a restart or a force-quit.** Start time and duration are persisted, and a cold
@@ -361,7 +377,8 @@ is: on the break, post the notification and immediately *schedule* an AlarmKit a
 `now + grace`, then cancel it if the phone docks in time. The waiting is the OS's job. A
 `setTimeout` here would simply never fire, and the failure would be silent.
 
-This exists so that coming home at 01:00 does not blast a house full of sleeping people for something
+This exists so that coming home at 01:00 does not blast a house full of sleeping people for
+something
 only the phone's owner cares about. The scheduled bedtime alarm has no grace; it fires at a time the
 household already expects.
 
@@ -462,7 +479,8 @@ alarm and any open session outright. It is logged and shown in history.
 
 **It is never rate-limited to the point of refusal.** A hard cap would reinstate exactly the trap
 this exists to remove: exhaust the week's allowance, lose Tag B, and there is no way out at all.
-Overuse is discouraged by **escalating friction** — a longer hold, a confirmation, a visible count in
+Overuse is discouraged by **escalating friction** — a longer hold, a confirmation, a visible count
+in
 history — never by refusing. Friction is a deterrent; a locked door is a defect.
 
 It also does not weaken Feature B, because the phone is across the room at the dock. Reaching it to
@@ -503,12 +521,14 @@ dock, and reboots at 05:00 has no geofencing until it is unlocked — which will
 user is asleep.
 
 The wake alarm should still fire. The location-dependent rules will not work until first unlock, and
-that is acceptable provided nothing depends on them *to ring*. Verified in build step 8, not assumed.
+that is acceptable provided nothing depends on them *to ring*. Verified in build step 8, not
+assumed.
 
 ### Both alarms ringing at once
 
 D10 makes the features independent, so nothing prevents identical or overlapping times. When two
-alarms are alerting, a scanned tag clears **the alarm whose role it matches**, not "the one currently
+alarms are alerting, a scanned tag clears **the alarm whose role it matches**, not "the one
+currently
 ringing" — the rule in §11 is written per-role for exactly this reason. Overlapping schedules should
 also be flagged at configuration time, since it is almost always a mistake.
 
@@ -564,7 +584,8 @@ reversible change later and an unnecessary variable now.
 | ESP32 board as an iBeacon | ~£3–5 | Flashed via ESPHome; TX power settable −12 to +9 dBm |
 
 Any two NFC cards already in a drawer would work — **except payment cards**, which randomise their
-UID by design. Stickers are worth buying anyway, because the tags need mounting on a wall or a kettle.
+UID by design. Stickers are worth buying anyway, because the tags need mounting on a wall or a
+kettle.
 
 **Run the beacon off USB at the dock.** There is a plug there already, since that is where the phone
 charges. This is not a convenience: it deletes the "beacon battery dies mid-night" failure mode
@@ -601,7 +622,8 @@ targets/
 ```
 
 **`core/` importing nothing platform-specific is the rule the whole design rests on.** It is the only
-part that encodes "can I cheat this?", the only part worth testing exhaustively, and the only part an
+part that encodes "can I cheat this?", the only part worth testing exhaustively, and the only part
+an
 Android build would reuse rather than rewrite.
 
 **`core/dock/` and `core/wake/` are siblings, not a pipeline.** They share the tag registry, the
@@ -622,8 +644,12 @@ reduce(state: State, event: Event, ctx: Context): { state: State; effects: Effec
 ```
 
 Pure, synchronous, total. **Everything it needs arrives in `ctx`** — `now`, the schedules, the tag
-registry, presence, proximity, and `stepsSinceAlertStart`. No ambient clock, no imports, no I/O. That
+registry, presence, proximity, `isCharging`, and `stepsSinceAlertStart`. No ambient clock, no
+imports, no I/O. That
 is what makes a golden trace reproducible.
+
+**`isCharging` is a `ctx` field rather than an event**, because D38 uses it as a veto at decision
+time — "is this proximity break real?" — not as something that happens.
 
 **Step counting can be unavailable, which is not the same as denied.** `CMPedometer` reports
 availability separately from authorisation — some devices simply cannot count. Both cases skip the
@@ -638,19 +664,33 @@ handed the answer. Keeping that direction is what stops `ctx` needing an escape 
 | | |
 | --- | --- |
 | **State** | Both: `idle` · `armed` · `alerting` · `cleared` · `stoodDown(reason)`. Dock only: `docked` · `gracing` |
-| **Event** | `tick` · `alarmFired` · `stopPressed` · `tagScanned` · `presenceChanged` · `proximityChanged` · `escapeHatchUsed` |
-| **Effect** | `scheduleAlarm` · `cancelAlarm` · `startGrace` · `acceptScan` · `rejectScan(reason)` · `openSession` · `closeSession` · `notify` |
+| **Event** | `tick` · `alarmFired` · `stopPressed` · `tagScanned` · `presenceChanged` · `proximityChanged` · `bluetoothChanged` · `escapeHatchUsed` |
+| **Effect** | `scheduleAlarm` · `cancelAlarm` · `startGrace` · `acceptScan` · `rejectScan(reason)` · `openSession` · `closeSession` · `recordOccurrence` · `notify` |
+
+**`bluetoothChanged` is deliberately not folded into `proximityChanged`.** D24 gives them opposite
+handling: an unseen beacon is uncertainty and must stay silent, while Bluetooth switched off is a
+definite end-and-record. One event carrying both would collapse exactly the distinction the decision
+exists for.
+
+**`recordOccurrence` is how `fired_at` gets written.** D25 calls it the single most important thing to
+record and D29's miss detection is built on it, so it cannot be an incidental side effect of some
+adapter. It is an effect like any other: it appears in golden traces, `core/` owns *when* it
+happens,
+and something outside performs the write. Ordering follows §12 — the row is written before the
+consequence is acted on, so a crash in between leaves a recoverable intent rather than a lost one.
 
 `core/dock/` and `core/wake/` each own a reducer over this shared vocabulary. They do not share a
 state machine, and neither may read the other's state (D10).
 
 **`rejectScan` must carry a reason the UI shows.** `wrongRole` · `unknownTag` · `notEnoughSteps` ·
-`nothingAlerting`. Refusing a *correct* tag because the step count has not been reached, while saying
+`nothingAlerting`. Refusing a *correct* tag because the step count has not been reached, while
+saying
 only "wrong tag", is the worst feedback the app can give — it happens at 07:00, to someone holding
 the right object, with no way to work out what is wanted. `notEnoughSteps` should say how many more.
 
 **Effects are descriptions, never actions.** `reduce` returns `scheduleAlarm`; something outside
-`core/` performs it. This is why `core/` needs no mocking and why the same trace can be asserted in a
+`core/` performs it. This is why `core/` needs no mocking and why the same trace can be asserted in
+a
 test and replayed in the night simulator.
 
 ### The `AlarmEngine` seam
@@ -688,14 +728,17 @@ Nothing else in the app may import AlarmKit, and no `Platform.OS` check belongs 
    on top of a sounding alarm, which is both useless and the moment most likely to earn a refusal.
 6. **Teach the escape hatch.**
 
-Step 5 is not optional and not a tooltip. The first night with an unreadable tag is a trap unless the
-user already knows the override exists, and that is precisely the night they are least equipped to go
+Step 5 is not optional and not a tooltip. The first night with an unreadable tag is a trap unless
+the
+user already knows the override exists, and that is precisely the night they are least equipped to
+go
 looking for it. Later phases extend onboarding with place setup and beacon pairing.
 
 ### What the alert itself can say
 
 AlarmKit gives a title and **exactly one** secondary button, and the Stop button belongs to the
-system. So the lock-screen alert cannot offer both "scan a tag" and "override" — it carries the title
+system. So the lock-screen alert cannot offer both "scan a tag" and "override" — it carries the
+title
 and one button that opens the app, and the app presents both. Pressing Stop re-arms (D2).
 
 The title should name **which** tag clears it, since the two features look identical at 03:00 and a
@@ -848,8 +891,10 @@ tags             id · uid · role · place_id? · label · created_at · update
 alarms           id · kind · hour · minute · enabled · created_at · updated_at
 alarm_days       alarm_id · weekday
 dock_settings    alarm_id · session_hours · grace_seconds · created_at · updated_at
-occurrences      id · alarm_id · due_at · fired_at? · cleared_at? · outcome? · place_id? · created_at
-sessions         id · place_id · started_at · ends_at · ended_at? · end_reason? · created_at · updated_at
+occurrences      id · alarm_id · due_at · fired_at? · cleared_at? · outcome? · place_id? ·
+created_at
+sessions         id · place_id · started_at · ends_at · ended_at? · end_reason? · created_at ·
+updated_at
 session_events   id · session_id · kind · at
 app_settings     id(=1) · step_threshold · rearm_seconds · … · updated_at
 ```
@@ -899,7 +944,8 @@ TypeScript uses, so the two cannot drift.
 *disabled* by default, so a schema full of correct FK declarations silently enforces nothing.
 
 **Time is stored two different ways on purpose.** Schedules are `hour`/`minute` integers — wall-clock
-local, so 07:00 stays 07:00 across a DST boundary (D23). Instants (`fired_at`, `started_at`) are unix
+local, so 07:00 stays 07:00 across a DST boundary (D23). Instants (`fired_at`, `started_at`) are
+unix
 epoch milliseconds in UTC. Mixing the two is precisely how alarm apps drift by an hour twice a year.
 
 **One wrinkle.** The iOS widget extension runs in a separate process and cannot read the SQLite file.
@@ -944,7 +990,8 @@ regardless of who owns the schedule.
 - **Disabling an alarm deletes its unresolved future occurrence.** Otherwise it is reported as missed
   forever, from a night the user deliberately opted out of.
 - **Editing an alarm invalidates its unresolved future occurrences**, exactly as a timezone change
-  does. Changing 07:00 to 07:30 with a horizon already materialised otherwise leaves the old instants
+  does. Changing 07:00 to 07:30 with a horizon already materialised otherwise leaves the old
+instants
   scheduled and the new time purely cosmetic.
 - **A timezone change invalidates unresolved future occurrences and they are recomputed.** Schedules
   are wall-clock (D23) but `due_at` is an absolute instant, so 07:00 materialised in London is the
@@ -960,7 +1007,8 @@ which is what lets reconcile be idempotent.
 
 ### Durability, without a server
 
-The database lives in the app's Documents directory, so it is **included in iCloud and device backups
+The database lives in the app's Documents directory, so it is **included in iCloud and device
+backups
 by default**. Tag registrations, places and history survive a restore onto a new phone — the tags
 themselves are physical objects and their UIDs do not change. Do not set the exclude-from-backup
 flag to save space.
@@ -975,7 +1023,8 @@ which is diagnostic, not operational. This is the whole argument for having no s
 ### State consistency: SQLite is intent, everything else is derived
 
 State lives in three places — the SQLite database, AlarmKit's scheduled alarms, and the App Group
-`UserDefaults` mirror. They can disagree after a crash, a force-quit, or a battery death mid-session.
+`UserDefaults` mirror. They can disagree after a crash, a force-quit, or a battery death
+mid-session.
 
 **Transactions alone cannot fix this.** ACID applies within SQLite, and the alarm is not in SQLite —
 it is in an OS service that cannot be enlisted in a database transaction. There is no two-phase
@@ -995,14 +1044,16 @@ The design is therefore **reconciliation, not transaction**:
   Running it twice must be harmless.
 
 **This depends on the bridge exposing a list-scheduled call, which is not guaranteed.** `AlarmManager`
-has `alarms` natively (§13 step 5 reads the SDK directly), but the community wrapper may only surface
+has `alarms` natively (§13 step 5 reads the SDK directly), but the community wrapper may only
+surface
 schedule and cancel. **Verify it in the step 5 spike** — reconciliation as designed is impossible
 without it.
 
 **The fallback if it is missing:** schedule by explicit UUID, taken from the occurrence row, and
 re-issue the whole desired set on every reconcile. Re-scheduling a known id overwrites rather than
 duplicates, which recovers idempotence without ever reading state back. It is strictly worse — a
-scheduled alarm the app does not know about can never be detected or cleaned up — so it is a fallback,
+scheduled alarm the app does not know about can never be detected or cleaned up — so it is a
+fallback,
 not a preference.
 
 Use transactions for the SQLite writes regardless — session state and its event log should move
@@ -1015,10 +1066,12 @@ project, which makes the provisioning boundary and the sensible work order the s
 
 A free Personal Team gives 7-day provisioning profiles, 3 devices and 10 App IDs a week, and it
 covers Expo, Expo Router, NativeWind, Drizzle, `expo-location`, and BLE beacons on a real device. It
-does **not** cover Core NFC (which returns *Sandbox restriction*), App Groups, or AlarmKit on device.
+does **not** cover Core NFC (which returns *Sandbox restriction*), App Groups, or AlarmKit on
+device.
 
 **The simulator is the exception worth exploiting.** AlarmKit runs there with only the Info.plist
-usage description, so step 5's spike — schedule, fire, launch-on-dismissal, re-arm — can be built and
+usage description, so step 5's spike — schedule, fire, launch-on-dismissal, re-arm — can be built
+and
 tested before any account exists. NFC and BLE cannot: the simulator has neither radio.
 
 **The 7-day expiry settles the question regardless.** An alarm that silently stops working every week
@@ -1026,7 +1079,8 @@ is not an alarm. The paid account is required for real use even where a capabili
 work.
 
 **Apply for the AlarmKit entitlement the day the account exists**, then carry on with steps 1–3 while
-it queues. Serialising behind it wastes the wait; ignoring it risks building `core/` for a capability
+it queues. Serialising behind it wastes the wait; ignoring it risks building `core/` for a
+capability
 that never arrives.
 
 1. Repo conventions + agent tooling (done).
@@ -1095,12 +1149,6 @@ that never arrives.
    the Metro line fails as a syntax error importing migrations, which reads like a bundler fault
    rather than a config one.
 
-   The point of Drizzle here is that **one schema file drives both drivers** — `expo-sqlite` on
-   device, `better-sqlite3` in tests (§15). Without that the harness would be testing a different
-   schema from the one that ships.
-
-   Three things it does not do: enable foreign keys, offer `db:push` against a device (generate and
-   commit the SQL every time), or index foreign keys.
 3. `core/` + its tests, against a synthetic clock, plus the night simulator. No UI, no native — this
    step runs entirely in Node and needs no device or account at all.
 4. NFC read → show a UID on screen. Proves the capability and the provisioning.
@@ -1175,7 +1223,8 @@ Three consequences:
    harness. Not a coverage target: the decision table in §5 is the checklist, and each entry that
    describes runtime behaviour maps to at least one test.
 
-   For scale, a mature repo in this stack carries roughly one line of test per three of source across 480 files.
+   For scale, a mature repo in this stack carries roughly one line of test per three of
+   source.
    `core/` should sit far above that — it is pure logic with no I/O to make testing awkward, and it
    is the whole reason the architecture insists on that purity.
 
@@ -1223,12 +1272,21 @@ it cares about instead of building a whole object graph.
 `core/` being a reducer means a scenario can be expressed as a scripted sequence of events and
 asserted as a **complete trace** of resulting states and effects — not a handful of spot assertions.
 
-Write one per scenario that matters: first night, tag lost, hotel, DST boundary, both alarms at once,
+Write one per scenario that matters: first night, tag lost, hotel, DST boundary, both alarms at
+once,
 beacon lost mid-session, phone restarted, exit-and-return.
 
+**A trace must pin each tag's portability explicitly.** Phase 1 has no places, so every tag is
+portable and the step gate is universal there; a trace that scans "a tag" and asserts
+`notEnoughSteps` would break the moment Phase 2 allows that tag to be fixed. Since the traces are
+the
+mechanism enforcing D36, this is the first thing that would quietly erode them.
+
 **A Phase 1 trace must still pass unchanged after Phase 4.** That is D36 expressed as a test rather
-than a promise: if adding places alters what the alarm does on an ordinary night, the layering leaked
-and the trace says so immediately. Re-recording a trace is how that protection gets lost, so it needs
+than a promise: if adding places alters what the alarm does on an ordinary night, the layering
+leaked
+and the trace says so immediately. Re-recording a trace is how that protection gets lost, so it
+needs
 a stated reason every time.
 
 ### Enforcing `core/` purity
@@ -1243,15 +1301,17 @@ trivially detectable statically.
 | --- | --- |
 | **Take** | The `check-house-rules.mjs` pattern (advisory scan, always exits 0, surfaces what would otherwise be re-taught in review) · SHA-pinned third-party actions · `actionlint` · `dependabot` (especially: the native packages are young and fragile) · vitest |
 | **Later** | paths-filter and skip-duplicate-actions (scar tissue from a large repo; premature here) · knip |
-| **Leave** | Docker · the Postgres test harness · pwsh · Playwright and visual tests · CODEOWNERS · preview-db, schema-review, Vercel workflows |
+| **Leave** | Docker · the Postgres test harness · pwsh · browser-based e2e and visual tests · code-owner rules · anything tied to server deploys or preview environments |
 
-**Docker does not transfer.** The existing image is a long-lived Next worker host for Azure Container
-Apps. Anchor has no server. More decisively, **iOS builds cannot run in a container at all** — they
-need macOS and Xcode. The equivalent is EAS Build, or macOS runners at a 10× minute multiplier.
+**Docker does not transfer.** That image exists to run a long-lived server process; Anchor has no
+server. More decisively, **iOS builds cannot run in a container at all** — they need macOS and
+Xcode.
+The equivalent is EAS Build, or macOS runners at a 10× minute multiplier.
 
-**pwsh does not transfer.** In the reference repo it orchestrates real infrastructure — cloud databases,
-obfuscation, tenant copies — with Pester and PSScriptAnalyzer behind it. Anchor has no
-infrastructure. The remaining scripting need is one house-rules checker, which node runs natively.
+**pwsh does not transfer.** Where it earns its place it is orchestrating real infrastructure —
+databases, data masking, environment copies — with its own test and lint tooling behind it. Anchor
+has no infrastructure. The remaining scripting need is one house-rules checker, which node runs
+natively.
 
 **Anchor needs one check the reference repo has no analogue for:** `expo-doctor`, which validates SDK and
 native dependency compatibility. Given two young native modules, that is a real gate.
@@ -1280,7 +1340,8 @@ is obvious. Spawned directly, with no shell-specific piping, so it behaves the s
   would otherwise be re-taught in review, and it runs in `/house-review` and CI rather than here.
   What it scans for: arbitrary Tailwind values (`p-[13px]`), more than one export per UI file, a
   missing co-located `types.ts`, comments interleaved between fields of an object literal, and
-  `Platform.OS` outside `src/alarm/`. Each is text-detectable with acceptable noise; anything needing
+  `Platform.OS` outside `src/alarm/`. Each is text-detectable with acceptable noise; anything
+needing
   type information belongs in review, not a regex.
 - **A rule with pre-existing violations belongs in the advisory scan, not the gate.** Putting it in
   the gate means either a permanently red build or a backlog nobody can clear, and both end with the
@@ -1297,7 +1358,8 @@ while `core/` has quietly grown a native import has not finished.
 
 ### CI shape (start here, grow later)
 
-On every PR, on ubuntu: `npm run check:code` and the advisory house-rules scan. **No device builds in
+On every PR, on ubuntu: `npm run check:code` and the advisory house-rules scan. **No device builds
+in
 CI initially** — macOS runners are expensive and EAS on demand is enough for a solo project.
 
 ## 16. Deliberately out of scope
