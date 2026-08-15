@@ -51,6 +51,14 @@ file a pointer, so they stay in sync.
 - **Never run prettier** (`--write` or `--check`). Match the surrounding style; formatting is
   manual/IDE.
 
+## Every phase ends working
+
+The app must **build and function at the end of every phase** (plan §3, D36). A phase is additive
+over a working base — never a half-wired intermediate that only makes sense once the next one lands.
+
+This is also a design check, not just discipline: if adding places breaks the alarm, the layering was
+wrong. That should surface at the end of the phase, not at the end of the build.
+
 ## Who this defends against
 
 **A tired person who wants better sleep, and nobody else.** Not an attacker, not a determined

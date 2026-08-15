@@ -70,6 +70,8 @@ default-keep novel findings unless disproved.
 - **A resumed or proximity-broken dock alarm sounding without the grace period** (D17), or a grace
   that can be restarted indefinitely with no per-session cap.
 - **Either feature reading the other's schedule or enabled state** (D10). Each must work alone.
+- **A change that leaves the app non-functional pending a later phase** (D36). Half-wired code that
+  only makes sense once the next phase lands is a defect now, not a promise.
 - **A re-arm delay that does not shorten**, or one that shortens below the floor where crossing a
   room becomes impossible (D18).
 - **Treating `unknown` presence as `away`** — it silently weakens enforcement.

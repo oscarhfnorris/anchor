@@ -130,6 +130,11 @@ go out separately.
 The order matters for two reasons: later phases genuinely cannot be built before earlier ones, and
 the two phases most likely to fail are cheap to attempt and expensive to discover late.
 
+**The app builds and works at the end of every phase** (D36). Each is additive over a working base,
+never a half-wired intermediate. That is why the all-or-nothing release costs nothing — stopping
+anywhere leaves something usable, and the release date is a choice rather than the first point at
+which the thing runs.
+
 ### Phase 1 — the alarm core
 
 Everything else sits on this. A morning alarm that only a registered tag can silence, with no
@@ -174,10 +179,10 @@ most plausibly dies. Both are cheap to attempt and expensive to discover late, w
 argument for the ordering. The AlarmKit spike runs in the simulator with no account at all (§14), so
 there is no reason to defer it.
 
-**Nothing stops running Phase 1 on your own phone while the later phases are built.** It costs
-nothing, it is the only way to learn whether walking to a tag actually gets you up, and that answer
-shapes how much the later phases need to do. Release is still all-or-nothing; using it early is not
-the same thing as shipping it.
+**Nothing stops running Phase 1 on your own phone while the later phases are built** — D36
+guarantees there is something to run. It is the only way to learn whether walking to a tag actually
+gets you up, and that answer shapes how much the later phases need to do. Release is still
+all-or-nothing; using it early is not the same thing as shipping it.
 
 ## 4. Prior art
 
@@ -231,6 +236,7 @@ Each is load-bearing. Changing one changes the design.
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
 | D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
+| D36 | **Every phase ends with a building, working app.** No phase may leave it half-wired | Each phase is additive over a working base, so stopping anywhere leaves something usable rather than a shell. It also keeps the seams honest — if adding places breaks the alarm, the layering was wrong, and that shows up at the end of the phase rather than at the end of the build |
 | D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set, default ~15) | Enough to prove you actually stood up, and no more. A portable tag scanned from bed accumulates zero steps, which is the case worth catching; a large N would just punish a small flat. Steps count from first ring, so stalling earns nothing |
 
 ## 6. The dock session
@@ -667,7 +673,7 @@ the cost of getting proximity wrong is being woken at 03:00.
 | The grace period becomes a repeatable bypass | **Accepted, not mitigated** | Judged unrealistic: repeatedly breaking proximity at home to farm five-minute windows is more effort than picking the phone up and ignoring the app. No cap; revisit only if it happens |
 | Session, alarm, and mirror state disagree after a crash | Medium, silent | Reconciliation (§12): SQLite holds intent, AlarmKit and the mirror are derived, reconcile idempotently on launch and foreground |
 | **Location Always silently downgraded to While Using** → every geofence rule fails quietly | Highest, and silent | Treat as a blocking state (§8): Feature A refuses to arm, home screen says so. Never degrade silently |
-| **The project is never finished** — four phases for a personal tool | High, and the likeliest failure of all | Release is all-or-nothing by choice, so the usual mitigation of shipping early does not apply. What remains: Phase 1 is runnable on your own phone while the rest is built, and the two riskiest spikes sit as early as their dependencies allow |
+| **The project is never finished** — four phases for a personal tool | Medium — largely defused by D36 | Every phase ends with a working app, so stopping at any point leaves something usable rather than a shell. Phase 1 is runnable on your own phone while the rest is built, and the two riskiest spikes sit as early as their dependencies allow |
 | **Step counting excludes wheelchair users** | Low personally, a real accessibility defect if shipped | D35 is the only proof-of-movement in the design. Shipping needs an alternative or an opt-out; for personal use it is acceptable, and recorded so it is not forgotten |
 | Motion & Fitness permission denied → no step gate | Medium | Fall back to tag-only enforcement and say so plainly. Never silently accept scans that should have been refused |
 | Phantom steps from a phone jostled in bed | Low | N is user-set; tune it upward if it happens. A handful of false steps will not reach a 20–30 step threshold |
