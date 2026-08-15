@@ -80,14 +80,37 @@ for (const f of findings) {
 }
 console.log(findings.length ? `\n${findings.length} advisory finding(s)` : '\nno advisory findings');
 
-// The decision checklist, per D37.
+// The decision checklist, per D37 — real coverage, not a count of `todo`.
+//
+// Counting stubs would report progress for renaming a stub. This instead asks which decisions are
+// named by a test that actually runs, which is the question D37 is really posing.
+const planPath = join(ROOT, 'docs/plan/anchor-plan.md');
 try {
-  const stubs = readFileSync(join(ROOT, 'src/__tests__/decisions.test.ts'), 'utf8');
-  const todo = (stubs.match(/it\.todo\(/g) ?? []).length;
-  const done = (stubs.match(/^\s*it\(/gm) ?? []).length;
-  console.log(`decisions: ${done} written, ${todo} stubbed (${done + todo} total)`);
+  const plan = readFileSync(planPath, 'utf8');
+  const decisions = [...plan.matchAll(/^\| (D\d+) \|/gm)].map((m) => m[1]);
+  const all = [...new Set(decisions)];
+
+  const covered = new Set();
+  const stubbed = new Set();
+  for (const file of files.filter((f) => /\.test\.tsx?$/.test(f))) {
+    // Strip comments first: a worked example inside a doc block is documentation, not coverage,
+    // and counting it would let a decision look tested because someone described how to test it.
+    const src = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    for (const m of src.matchAll(/(?:describe|it)(\.todo)?\(\s*['"`]([^'"`]*)/g)) {
+      for (const d of (m[2].match(/\bD\d+\b/g) ?? [])) {
+        (m[1] ? stubbed : covered).add(d);
+      }
+    }
+  }
+  const outstanding = all.filter((d) => !covered.has(d));
+  console.log(
+    `decisions: ${covered.size}/${all.length} covered by a running test` +
+      (outstanding.length ? ` — outstanding: ${outstanding.join(', ')}` : ' — all covered'),
+  );
 } catch {
-  console.log('decisions: checklist not found — src/__tests__/decisions.test.ts is missing');
+  console.log('decisions: could not read the plan to build the checklist');
 }
 
 process.exit(0);
