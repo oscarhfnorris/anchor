@@ -10,6 +10,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
+    // Schedules are wall-clock local (D23), so the DST tests need a fixed zone to be deterministic.
+    // Without this they pass or fail depending on where the machine is.
+    env: { TZ: 'Europe/London' },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
