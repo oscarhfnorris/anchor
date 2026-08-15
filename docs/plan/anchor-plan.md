@@ -118,7 +118,7 @@ Each is load-bearing. Changing one changes the design.
 | D3 | Only a **confirmed exit transition** may silence a ringing alarm. A static "presence says away" reading may not, and `unknown` never may | A geofence glitch at 03:00 must not be able to cancel the alarm that wakes you. Requiring a corroborated transition keeps that protection while allowing the deliberate case (D12) |
 | D4 | `unknown` location is **not** `away` | Treating no-fix-yet as absence silently weakens enforcement |
 | D5 | Feature A gives up; **Feature B never does** | An alarm you can outlast is an alarm you learn to outlast |
-| D6 | Give-up is measured by **absence of interaction**, not motion sensing | iOS exposes no "user unlocked the phone" API; pressing Stop already proves presence, and costs no permission |
+| D6 | Give-up is measured by **absence of interaction**, not motion sensing | iOS exposes no "user unlocked the phone" API; pressing Stop already proves presence, and costs no permission. Note this is not contradicted by D35: that queries a *past* step count over a fixed window, which CoreMotion supports well; D6 rejected *live* background motion monitoring to infer presence, which it does not |
 | D7 | Settings freeze **±1 hour** around either alarm | Otherwise bedtime moves an hour later at 22:29 |
 | D8 | Everything on-device. **No server.** | No account, no sync, no privacy surface, nothing to run |
 | D9 | Outside every known place, Feature B **degrades rather than disappears** | The morning tags are all elsewhere and unreachable. Suppressing the alarm means oversleeping; keeping it un-clearable means an alarm with no off switch |
@@ -146,6 +146,8 @@ Each is load-bearing. Changing one changes the design.
 | D31 | A role accepts **any of its registered UIDs**, not one tag | This is what makes multi-location work with no other machinery: a morning tag in each kitchen, and whichever you reach satisfies the alarm. v1 needs nothing beyond this |
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
+| D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
+| D35 | A scan is accepted only after **N steps since the alarm first rang** (`CMPedometer`, user-set N) | This, not the tag's location, is what proves you moved. A portable tag on the nightstand scanned from bed accumulates zero steps and is rejected — so portability costs nothing in enforcement. It strengthens fixed tags too |
 
 ## 5. The dock session
 
@@ -245,6 +247,18 @@ nothing in a hotel. Features degrade per place rather than failing:
 | Morning tag only | Feature B works normally |
 | Nothing registered | Unknown place: Feature A suppressed, Feature B degrades to dismissible (D9) |
 
+### Portable tags
+
+A tag need not belong to a place at all (D34). A fob on a keyring or a card in a wallet works
+anywhere — hotels, a first night somewhere new, travel — which is the gap places alone cannot fill.
+
+The obvious objection is that a carried tag can simply be put next to the bed, and scanned lying
+down. **The step requirement (D35) is what removes that**, and it is why portability costs nothing:
+what proves you got up is the walking, not the tag's coordinates. A portable tag on the nightstand
+accumulates zero steps and is refused exactly as a fixed one would be.
+
+This also means a place with **no tags at all** is still usable if you carry one.
+
 ### Moving the hardware
 
 One beacon can serve several places, because only one place is occupied at a time — carry the ESP32
@@ -291,7 +305,8 @@ that trade is made explicitly.
 
 ### Permissions, and the ways they rot
 
-The app needs AlarmKit authorisation, NFC, Bluetooth, Notifications, and **Location: Always**.
+The app needs AlarmKit authorisation, NFC, Bluetooth, Notifications, **Motion & Fitness** (D35), and
+**Location: Always**.
 
 Location Always is the fragile one. iOS may downgrade it to *While Using* — at the prompt, at the
 "still allowing?" re-prompt weeks later, or on reinstall. Every location-dependent rule (D3, D12,
@@ -433,8 +448,12 @@ Rules that matter, stated so a test can be written against each:
   schedule or enabled state (D10).
 - Every rule naming "the home region" resolves against **the active place** — nearest centre, ties to
   most recently active (D30). Inside no known place, D9 applies.
-- A scan matches if its UID is registered to the required role **at any place** (D31). Enforcement
-  rules still bind to the active place.
+- A scan matches if its UID is registered to the required role **at any place, or as portable**
+  (D31, D34). Enforcement rules still bind to the active place.
+- A matching scan is accepted only once **N steps have accumulated since the alarm first rang**
+  (D35). Steps are counted from first ring, not from the latest re-arm, so stalling earns nothing.
+- With Motion & Fitness unavailable, the step gate is skipped and the app says so — it never silently
+  accepts a scan it should have refused.
 - A place with a dock tag but no beacon runs Feature A **unenforced**, and says so at setup (D33).
 - Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
   not alerting.
@@ -570,6 +589,9 @@ the cost of getting proximity wrong is being woken at 03:00.
 | Session, alarm, and mirror state disagree after a crash | Medium, silent | Reconciliation (§11): SQLite holds intent, AlarmKit and the mirror are derived, reconcile idempotently on launch and foreground |
 | **Location Always silently downgraded to While Using** → every geofence rule fails quietly | Highest, and silent | Treat as a blocking state (§7): Feature A refuses to arm, home screen says so. Never degrade silently |
 | **The project is never finished** — 12 steps for a personal tool | High, and the likeliest failure of all | The v1 cut at build step 7: a working morning alarm with no geofencing, sessions, or beacon. Use it for a fortnight before continuing |
+| **Step counting excludes wheelchair users** | Low personally, a real accessibility defect if shipped | D35 is the only proof-of-movement in the design. Shipping needs an alternative or an opt-out; for personal use it is acceptable, and recorded so it is not forgotten |
+| Motion & Fitness permission denied → no step gate | Medium | Fall back to tag-only enforcement and say so plainly. Never silently accept scans that should have been refused |
+| Phantom steps from a phone jostled in bed | Low | N is user-set; tune it upward if it happens. A handful of false steps will not reach a 20–30 step threshold |
 | Two addresses inside one 100m radius resolve to the same place | Medium | D14's floor makes them genuinely indistinguishable; treat them as one place rather than pretending otherwise |
 | iOS monitors at most **20 regions system-wide**, shared with every other app | Low at this scale | A handful of places is fine; worth remembering, not worth designing around |
 | The escape hatch becomes the normal way to dismiss | Medium | Deliberately awkward, logged, shown in history, rate-limited per week (D20) |
