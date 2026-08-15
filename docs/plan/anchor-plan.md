@@ -7,6 +7,31 @@ on the design, once against §1's threat model, which produced the build phases 
 is the build order — v1 is the release and v1 is everything here; the phases are how it gets built,
 not what goes out when.
 
+### Where to look
+
+| Doing this | Read |
+| --- | --- |
+| Anything at all | §1 threat model, §3 phases |
+| Implementing a behaviour rule | §5 decisions, §11 behaviour rules |
+| Writing a test | §15, and §5 as the checklist (D37) |
+| Touching the database | §12 |
+| Scaffolding or CI | §13 step 2, §15 |
+| Adding a rule that closes a loophole | §1 — it probably should not exist |
+| Wondering why something is the way it is | §5. Every decision carries its reason |
+
+### Words this document uses precisely
+
+| | |
+| --- | --- |
+| **Dock** / **wake** | The evening and morning alarms. Two independent features (D10) |
+| **Place** | A location plus whatever hardware is installed there (D30) |
+| **Active place** | The place the phone is currently inside — what "home" used to mean |
+| **Portable tag** | A tag belonging to no place, carried (D34) |
+| **Session** | A stretch of night during which the phone must stay at the dock (§6) |
+| **Occurrence** | One scheduled firing of one alarm, and its outcome (D25) |
+| **Grace** | Vibrate-and-notify before an alarm sounds (D17) |
+| **Golden trace** | A scripted scenario asserted as its complete event/effect sequence (§15) |
+
 ---
 
 ## 1. The problem
@@ -581,6 +606,39 @@ proximity suspension in §2, and it lives at the boundary, explicitly.
 Android later means writing `engine.android.ts` plus one full-screen Activity, and touching nothing
 else.
 
+### The surface
+
+| Screen | Shows |
+| --- | --- |
+| `index` | Both alarms, next fire time, and **whether the last one actually fired** (D25/D29). That last line is the watchdog made visible |
+| `alarm/[kind]` | Time, weekdays, enabled. Frozen within ±1h of firing (D7) |
+| `tags/index` | Registered tags — role, and where each one lives |
+| `tags/register` | Scan → show the UID → name it → pick a role → fixed here, or portable |
+| `places` | Phase 2. Add from current location, set radius, and **state plainly what this place can enforce** given the hardware in it (D33) |
+| `settings` | Step threshold, re-arm delay, grace, session duration |
+| `history` | Occurrences, and every escape-hatch use |
+
+### First run
+
+1. **What this will do to you**, stated honestly. Someone should be able to decide against it here.
+2. AlarmKit authorisation.
+3. **Register a tag** — D27 blocks enabling an alarm without one, so this cannot be skipped.
+4. Set the time.
+5. **Teach the escape hatch.**
+
+Step 5 is not optional and not a tooltip. The first night with an unreadable tag is a trap unless the
+user already knows the override exists, and that is precisely the night they are least equipped to go
+looking for it. Later phases extend onboarding with place setup and beacon pairing.
+
+### What the alert itself can say
+
+AlarmKit gives a title and **exactly one** secondary button, and the Stop button belongs to the
+system. So the lock-screen alert cannot offer both "scan a tag" and "override" — it carries the title
+and one button that opens the app, and the app presents both. Pressing Stop re-arms (D2).
+
+The title should name **which** tag clears it, since the two features look identical at 03:00 and a
+half-asleep person should not have to work out which alarm is sounding.
+
 **Why the logic can live in TypeScript.** Both platforms launch the app when an alarm is dismissed
 (iOS via launch-on-dismissal, Android via the full-screen intent). JS is running by the time the
 re-arm decision is needed. If that were not true the logic would have to be written twice in two
@@ -785,6 +843,20 @@ epoch milliseconds in UTC. Mixing the two is precisely how alarm apps drift by a
 **One wrinkle.** The iOS widget extension runs in a separate process and cannot read the SQLite file.
 The handful of values native code needs at alarm time go in an **App Group `UserDefaults`**, written
 through the native module. `@bacons/apple-targets` configures the App Group.
+
+### Durability, without a server
+
+The database lives in the app's Documents directory, so it is **included in iCloud and device backups
+by default**. Tag registrations, places and history survive a restore onto a new phone — the tags
+themselves are physical objects and their UIDs do not change. Do not set the exclude-from-backup
+flag to save space.
+
+There is no cross-device sync and there should not be (D8). A second phone re-registers, which takes
+a minute.
+
+**Losing the database entirely is recoverable and not worth engineering against.** Tags rescan in
+under a minute, places are re-added from where you are standing, and the only true loss is history —
+which is diagnostic, not operational. This is the whole argument for having no server, and it holds.
 
 ### State consistency: SQLite is intent, everything else is derived
 
