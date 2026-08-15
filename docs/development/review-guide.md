@@ -1,0 +1,121 @@
+# Review guide
+
+How code review works here and the rules it applies. `/house-review` loads this. The planning-side
+counterpart is `plan-audit-guide.md`.
+
+Adapted from a mature repo in a related stack. The verdict machinery is unchanged; Parts A and B are rewritten
+for this project — importing its Postgres, tRPC, and multi-tenant rules wholesale would be
+ceremony with nothing to push back on.
+
+## Run
+
+**`/house-review`** — the deterministic checks plus the agent review, all triaged through this guide.
+**Loops**: report findings and verdicts in chat, fix the valid ones, re-run — until a round finds
+nothing new.
+
+Deterministic layers (add as they exist; do not block on ones that don't yet):
+`npm run type-check` · `npm run lint` · `npm test`.
+
+## Verdict vocabulary
+
+Two axes, not competing sets:
+
+- *Recall axis* — how a reviewer EMITS a candidate: **CONFIRMED** (load-bearing line + concrete
+  failure scenario) or **PLAUSIBLE** (realistic but unproven). A candidate the code disproves is
+  never surfaced.
+- *Decision axis* — how `/house-review` TRIAGES each candidate: **VALID** (concrete failure scenario
+  → will fix) or **REFUTED** (Part A match, or the code disproves it → dropped, with the reason).
+- CONFIRMED/PLAUSIBLE is the *input*; VALID/REFUTED is the *output*. A PLAUSIBLE candidate can triage
+  to either. **Convergence = a full round yields zero new VALID findings.** Prior REFUTED findings
+  are carried forward, not re-litigated.
+
+**Verify discipline:** keep only findings citing a load-bearing line (else drop); auto-refute Part A;
+default-keep novel findings unless disproved.
+
+## A. DON'T flag (intentional)
+
+- **Re-arming an alarm the user just stopped.** This is the entire enforcement mechanism, not a bug.
+  The system Stop button is deprecated-but-unremovable in iOS 26.1, so re-arm is the only option.
+- **The morning alarm having no give-up path.** Deliberate — see the plan, §5 D5.
+- **The step gate not applying to fixed tags.** Scoped to portable tags on purpose (D35) — a fixed tag
+  already required the walk, so the gate there could only fire when wrong.
+- **Duplicated-looking dock/wake handling.** They are two independent features encoding genuinely
+  different rules (one is suppressible, gives up, and resumes on re-entry; the other degrades, never
+  gives up, and does not resume). Do not "unify" them — see the plan, §5 D10 and D13.
+- **The dock/wake asymmetry on re-entry.** Deliberate, and derived from their different success
+  conditions — see the plan, §5 D13. Not an oversight in whichever branch you read second.
+- **`unknown` presence being treated as home.** Deliberate fail-safe — see the plan, §5 D4.
+- **Proximity code declining to ring when the beacon state is ambiguous.** That is the intended bias,
+  not a missed case — see the plan, §6.
+- **An open bypass that requires deliberate effort** — force-quit, reinstall, moving a tag, editing a
+  setting the night before. These work by design; the threat model is a tired person, not an attacker
+  (plan §1). "A determined user could…" is not a finding.
+- Unchanged lines — review the diff, not history.
+- Missing Android implementations. Deferred by the plan.
+
+## B. DO flag (defects)
+
+- **A `Platform.OS` check outside `src/alarm/`.** The seam is the interface, not scattered branching.
+- **`src/core/` importing `expo-*`, `react-native`, `react`, or a native module.** This is the rule
+  the architecture rests on.
+- **Comparing NDEF payload instead of hardware UID**, or an unnormalised UID comparison, or any path
+  where an empty/failed read could match a registered tag.
+- **Silencing a ringing alarm on anything less than a corroborated exit.** A bare region-exit event,
+  a static `away` reading, or a stale fix must not stop an alarm. Only a fresh fix showing real
+  distance beyond the radius qualifies — see the plan, §5 D3/D12.
+- **The dock alarm not resuming on re-entry** (D13), or a wake-alarm exit-stop treated as permanent
+  rather than provisional (D26). Both rules are live: D13 governs a real departure, D26 catches a
+  confident-but-wrong fix.
+- **A tag registered to two roles** (D22), or role matching that consults the tag's place.
+- **A configurable place radius accepting a value below 100m.** iOS geofencing degrades below that,
+  and the floor is a hardware limit rather than a policy (D14).
+- **Dock session state held only in memory**, or rebuilt from alarm state rather than rehydrated from
+  the sessions table on cold launch (D15).
+- **A resumed or proximity-broken dock alarm sounding without the grace period** (D17). Note there is
+  deliberately **no** per-session cap on graces — that was judged unrealistic (§14), so its absence is
+  not a finding.
+- **Either feature reading the other's schedule or enabled state** (D10). Each must work alone.
+- **A change that leaves the app non-functional pending a later phase** (D36). Half-wired code that
+  only makes sense once the next phase lands is a defect now, not a promise.
+- **A re-arm delay that does not shorten**, or one that shortens below the floor where crossing a
+  room becomes impossible (D18).
+- **Treating `unknown` presence as `away`** — it silently weakens enforcement.
+- **Proximity ringing on a single missed beacon advertisement**, or on Bluetooth being off, or
+  without a debounce window. This is the highest-severity defect class in the app: it wakes the user
+  at 03:00 for nothing.
+- **Cross-feature coupling between `core/dock/` and `core/wake/`** beyond the one documented
+  suspension rule. They are independent (plan §5 D10).
+- **Alarm-critical state written only to SQLite.** The iOS widget extension is a separate process and
+  cannot read it; those values belong in the App Group `UserDefaults`.
+- **Behaviour rules implemented in `ui/` or a platform module** rather than `core/`. If it decides
+  *when an alarm fires or clears*, it belongs in `core/` and needs a test.
+- **An Expo or AlarmKit API used from memory rather than retrieved.** Especially a hallucinated
+  method on a community AlarmKit bridge.
+- **Unpinned versions on the AlarmKit / NFC / apple-targets packages.** They are young; drift breaks
+  the build silently.
+- Silent fallback on an alarm path — **fail loud, or fail toward the alarm still ringing**.
+- More than one export per file in UI code / no co-located `types.ts`.
+- Arbitrary spacing (`p-[13px]`) rather than the 4-point scale.
+- Duplicated logic that should be a shared, tested helper. **And the inverse:** a single-use helper
+  extracted only to duck a lint metric — restructure inline instead. Extraction must earn itself.
+- **Anti-cheat machinery whose only justification is closing a loophole** (plan §1). Every such rule
+  needs an independent reason — correctness, honesty about degraded state, or not being annoying.
+  This is a real finding class, not a style note: it is how the design accretes complexity nobody
+  needs.
+- Comments interleaved between fields of an object or array literal.
+- New behaviour rule in `core/` with no test.
+
+## C. Tests
+
+- Every behaviour rule in `core/` needs a test. Rules outside `core/` are only ever tested by
+  sleeping, which is why they should not be outside `core/`.
+- **A scenario's golden trace must not change when a later phase lands.** If Phase 2 alters a Phase 1
+  trace, that is a regression, not an update — do not re-record it without a stated reason.
+- DB tests take a fresh database per test. A test that depends on another test's rows is a defect
+  even when it passes.
+
+## D. Scope
+
+- One concern per change. Tests added, or a stated reason.
+- Every finding fixed or dismissed **with a reason**.
+- Never write review results as `.md` files into the repo — findings go in chat.
