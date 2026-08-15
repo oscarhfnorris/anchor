@@ -3,8 +3,8 @@
 Status: **audited, pre-build.** Nothing here is built. Converged through `/house-plan` twice — once
 on the design, once against §1's threat model, which produced the shipping order in §3.
 
-**Read §1 and §3 first.** §1 says who this defends against and is the brake on adding machinery; §3
-says what actually gets built. Everything else is either detail for v1 or deferred beyond it.
+**Read §1 and §3 first.** §1 says who this defends against and is the brake on adding machinery. §3
+is the shipping order — everything in this document gets built, and §3 says in what sequence.
 
 ---
 
