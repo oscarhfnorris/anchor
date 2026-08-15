@@ -606,6 +606,44 @@ proximity suspension in §2, and it lives at the boundary, explicitly.
 Android later means writing `engine.android.ts` plus one full-screen Activity, and touching nothing
 else.
 
+### The `core/` contract
+
+This is the most load-bearing interface in the codebase and the one an implementer would otherwise
+invent. The vocabulary is fixed here; the implementation is not.
+
+```ts
+reduce(state: State, event: Event, ctx: Context): { state: State; effects: Effect[] }
+```
+
+Pure, synchronous, total. **Everything it needs arrives in `ctx`** — `now`, the schedules, the tag
+registry, current presence, proximity, step count. No ambient clock, no imports, no I/O. That is what
+makes a golden trace reproducible.
+
+| | |
+| --- | --- |
+| **State** | `idle` · `armed` · `alerting` · `gracing` · `docked` · `cleared` · `stoodDown(reason)` |
+| **Event** | `tick` · `alarmFired` · `stopPressed` · `tagScanned` · `presenceChanged` · `proximityChanged` · `escapeHatchUsed` |
+| **Effect** | `scheduleAlarm` · `cancelAlarm` · `startGrace` · `acceptScan` · `rejectScan(reason)` · `openSession` · `closeSession` · `notify` |
+
+`core/dock/` and `core/wake/` each own a reducer over this shared vocabulary. They do not share a
+state machine, and neither may read the other's state (D10).
+
+**Effects are descriptions, never actions.** `reduce` returns `scheduleAlarm`; something outside
+`core/` performs it. This is why `core/` needs no mocking and why the same trace can be asserted in a
+test and replayed in the night simulator.
+
+### The `AlarmEngine` seam
+
+`src/alarm/types.ts` is the only interface behind which platform code hides. Its responsibilities,
+not its signatures:
+
+- schedule an alarm at an instant, and cancel one
+- report authorisation state, and request it
+- surface "an alarm fired" and "stop was pressed" as events into `core/`
+- list what is currently scheduled, so reconciliation (§12) can compare intent against reality
+
+Nothing else in the app may import AlarmKit, and no `Platform.OS` check belongs outside this folder.
+
 ### The surface
 
 | Screen | Shows |
@@ -935,6 +973,22 @@ that never arrives.
    | `eslint.config.js` | `no-restricted-imports` over `src/core/**`, banning `expo*`, `react`, `react-native*` and the platform folders. Hard error, not advisory (§15) |
    | `src/db/client.ts` | `PRAGMA foreign_keys = ON` on every connection. Drizzle will not do it and SQLite defaults to off |
    | `test/db.ts` | The same pragma, plus the migrate-once / serialize / deserialize template (§15). FKs off in tests means violations pass locally and fail on device |
+
+   **`package.json` scripts:**
+
+   ```
+   check:code      node ./scripts/check-code.mjs      # the gate: lint + types + test + doctor
+   lint            eslint .
+   type-check      tsc -p tsconfig.check.json --noEmit
+   test            vitest --run
+   test:watch      vitest
+   doctor          npx expo-doctor
+   db:generate     drizzle-kit generate
+   check:rules     node ./scripts/check-house-rules.mjs   # advisory, always exits 0
+   ```
+
+   `check:code` is the gate and the definition of done alongside `npm test`. `check:rules` is
+   advisory and deliberately outside it (§15).
 
    **Done when:** the app boots on device, NativeWind styles a screen, a Drizzle migration runs,
    `npm test` **and `npm run check:code`** both pass, **and the purity rule has been proven to fire** by adding a deliberately
