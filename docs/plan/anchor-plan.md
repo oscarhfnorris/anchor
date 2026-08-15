@@ -646,11 +646,11 @@ erDiagram
         int enabled
     }
     ALARM_DAYS {
-        int alarm_id PK-FK
+        int alarm_id PK, FK
         int weekday PK "CHECK 0-6, rows not a bitmask"
     }
     DOCK_SETTINGS {
-        int alarm_id PK-FK
+        int alarm_id PK, FK
         int session_hours
         int grace_seconds
     }
@@ -676,6 +676,11 @@ erDiagram
         int session_id FK
         text kind "proximity_lost|restored|grace_started|grace_expired"
         int at
+    }
+    APP_SETTINGS {
+        int id PK "CHECK id = 1, singleton, no relations"
+        int step_threshold "D35"
+        int rearm_seconds "D18"
     }
 ```
 
