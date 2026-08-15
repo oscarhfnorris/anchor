@@ -62,6 +62,13 @@ default-keep novel findings unless disproved.
   Feature A completely — see the plan, §4 D13.
 - **A configurable home radius accepting a value below 100m.** iOS geofencing degrades below that,
   and the floor is what stops the radius becoming a one-tap escape hatch (D14).
+- **Dock session state held only in memory**, or rebuilt from alarm state rather than rehydrated from
+  the sessions table on cold launch (D15).
+- **A resumed or proximity-broken dock alarm sounding without the grace period** (D17), or a grace
+  that can be restarted indefinitely with no per-session cap.
+- **Either feature reading the other's schedule or enabled state** (D10). Each must work alone.
+- **A re-arm delay that does not shorten**, or one that shortens below the floor where crossing a
+  room becomes impossible (D18).
 - **Treating `unknown` presence as `away`** — it silently weakens enforcement.
 - **Proximity ringing on a single missed beacon advertisement**, or on Bluetooth being off, or
   without a debounce window. This is the highest-severity defect class in the app: it wakes the user

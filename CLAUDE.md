@@ -34,8 +34,16 @@ file a pointer, so they stay in sync.
   A missed enforcement costs one night's discipline; a false positive at 03:00 costs a night's sleep
   and the user's trust in the app.
 - **The dock and wake features are independent.** They share the tag registry, schedule arithmetic
-  and presence service — nothing else. The single permitted coupling is suspending proximity while
-  the wake alarm alerts. Do not "unify" their handling; they encode genuinely different rules.
+  and presence service — nothing else. Each must work correctly with the other disabled, and neither
+  may read the other's schedule or enabled state. The single permitted coupling is suspending
+  proximity while the wake alarm alerts. Do not "unify" their handling; they encode genuinely
+  different rules.
+- **A dock session is durable state, not memory.** It must survive a restart or force-quit and be
+  rehydrated on cold launch, or "restart the phone" bypasses the feature in one step.
+- **A resumed or proximity-broken dock alarm goes through the grace period.** Vibrate and notify
+  first, sound only after the configured delay unless docked. Never skip straight to sounding — that
+  wakes a household for something only the phone's owner cares about, and it is what keeps a
+  proximity false positive from being a siren at 03:00.
 - **One export per file** in UI code, named after its export (`tag-card.tsx`, `use-alarm.ts`).
   Shared types go in a co-located `types.ts`. Service/lib modules may group related exports.
 - **Spacing: 4-point system.** Tailwind/NativeWind scale utilities only (`gap-*`, `p-*`, `m-*`) — no

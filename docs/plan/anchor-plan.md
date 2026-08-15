@@ -62,6 +62,15 @@ drifts indoors, and a spurious exit at 07:00 would silently cancel the alarm and
 Corroborate with a fresh fix showing real distance beyond the radius. **If the fix is unavailable or
 ambiguous, keep ringing.** This is the same bias as everywhere else in the app except proximity.
 
+**Confirmation is automatic, with no button to press.** While any alarm is alerting, location runs at
+high accuracy continuously, and every re-arm cycle takes a fresh fix. A real departure is therefore
+confirmed within seconds of the phone getting a clean reading, without the user doing anything.
+
+The usual objection to continuous high-accuracy location — battery — does not apply here. It runs
+only while an alarm is actually sounding, which is a matter of minutes, and the phone is about to be
+picked up regardless. Waiting on iOS's own region-exit debounce would leave the alarm ringing all the
+way down the street; polling directly is what makes the rule usable rather than decorative.
+
 **What happens on return differs by feature, because their success conditions differ.**
 
 | | On confirmed exit | On return |
@@ -114,6 +123,11 @@ Each is load-bearing. Changing one changes the design.
 | D12 | Leaving the home region while an alarm is alerting **stops it** — both features | The clearing tag is unreachable once you have left, and a phone screaming in public with no off switch is worse than a missed enforcement |
 | D13 | On return, the **dock alarm resumes** and the **wake alarm does not** | Their success conditions differ. Walking 150m from the house already proves you are awake and out of bed, so the wake alarm's goal is met. It does nothing to put the phone on the dock, so that obligation is still outstanding — and without the resume, "step outside and back" would bypass Feature A entirely |
 | D14 | The home radius is **user-configurable**, floored at 100m | iOS geofencing degrades below 100m. Above that it is a difficulty dial: small is easier to escape, large is slower to register a real departure. D7's freeze stops it being shrunk at 06:55 |
+| D15 | The dock session **persists across restart and force-quit** | Otherwise "restart the phone" is a one-step bypass |
+| D16 | A session ends on **confirmed geofence exit, or a user-set duration** from its start — whichever first | It must not depend on Feature B's alarm time; B may be disabled entirely (D10). A session that never closes corrupts the following night |
+| D17 | A **resumed or proximity-broken** dock alarm vibrates and notifies first, sounding only after a user-set delay unless docked | Coming home at 01:00 should not blast sleeping housemates. It also downgrades a 03:00 proximity false positive from a siren to a vibration — the best available mitigation for the project's highest risk |
+| D18 | The re-arm delay **shortens with each cycle** | Stalling should get progressively worse, not stay comfortable |
+| D19 | While any alarm alerts, location runs at **high accuracy continuously** | Makes D12 confirmation automatic and near-instant with zero taps. Battery is irrelevant over the minutes an alarm sounds |
 
 ## 5. The dock session
 
@@ -126,12 +140,32 @@ pending alarm and starts the session immediately. Going to bed early should neve
 and stays gone past a debounce window, the dock alarm resumes. This is what makes early docking safe:
 without it, docking at 20:00 and retrieving the phone at 20:05 defeats the whole feature.
 
-**The session ends** at a configured "docked until" time, defaulting to Feature B's alarm time but
-stored independently (the features are independent — see D10). Proximity is also suspended while
-Feature B is alerting (§2).
+**The session has a user-set duration** — X hours from the moment it starts. It ends when that
+elapses, or on a confirmed exit from the home region, whichever comes first. It does **not** reference
+Feature B's alarm time: the features are independent (D10), Feature B may be disabled entirely, and a
+dock session must work with no morning alarm configured at all.
 
-**Proximity runs only while at home.** Outside the home region there is no dock and nothing to
-enforce.
+**The session survives a restart or a force-quit.** Start time and duration are persisted, and a cold
+launch rehydrates any session still inside its window. Without this, "restart the phone" is a
+one-step bypass of the whole feature.
+
+**Proximity runs only while at home,** and is suspended while Feature B is alerting (§2). Outside the
+home region there is no dock and nothing to enforce.
+
+### The grace period
+
+**A resumed or broken dock alarm does not start at full volume.** It vibrates and posts a notice
+first, then sounds after a user-set delay — 30 seconds, 1 minute, 5 minutes — unless the phone is
+docked in the meantime.
+
+This exists so that coming home at 01:00 does not blast a house full of sleeping people for something
+only the phone's owner cares about. The scheduled bedtime alarm has no grace; it fires at a time the
+household already expects.
+
+The grace also happens to be the best available mitigation for the project's highest risk. A
+proximity false positive at 03:00 becomes a vibration and a notification rather than a siren, and if
+the beacon reappears within the window nothing sounds at all. **Apply it to proximity breaks as well
+as re-entry**, for exactly that reason.
 
 ### Why this is the riskiest part of the design
 
@@ -224,10 +258,18 @@ Rules that matter, stated so a test can be written against each:
 - Presence may suppress Feature A entirely and may downgrade Feature B to dismissible.
 - A **confirmed exit transition** while alerting stops the alarm (D12). A static `away` reading may
   not silence a ringing alarm, and `unknown` never may.
-- On return, the **dock** alarm resumes inside its window; the **wake** alarm does not (D13).
+- On return, the **dock** alarm resumes for the remainder of the session window; the **wake** alarm
+  does not (D13).
 - An exit is confirmed only by a fresh fix showing real distance beyond the radius. An exit event
   that cannot be corroborated leaves the alarm ringing.
 - The home radius is configurable but never below 100m (D14).
+- A dock session persists across process death and is rehydrated on cold launch if still inside its
+  window (D15). It closes on confirmed exit or when its duration elapses (D16).
+- A resumed or proximity-broken dock alarm passes through the grace period first: vibrate, notify,
+  then sound after the configured delay unless docked (D17). The scheduled bedtime alarm does not.
+- Each re-arm shortens the delay (D18); the give-up window still measures from the first ring.
+- Both features must function correctly with the other disabled. Neither may read the other's
+  schedule or enabled state (D10).
 - Proximity may only resume the dock alarm during an active dock session, at home, while Feature B is
   not alerting.
 - Uncertain proximity state never rings (§5).
@@ -240,7 +282,9 @@ SQLite via Drizzle. Kilobytes total.
 - `alarms` — one row per feature: kind, time, active weekdays, enabled, feature-specific settings
 - `home_region` — centre, radius
 - `beacons` — uuid/major/minor, label, last_seen, last_rssi
-- `sessions` — dock session history: started, ended, how it ended, proximity breaks
+- `sessions` — dock sessions: started, duration, state, ended, how it ended, proximity breaks, graces
+  used. **This table is live state, not just history** — a session must be rehydratable after process
+  death (D15), so it is the durable record of whether a night is in progress
 - `events` — alarm fired / stopped / scanned / stood down, for debugging why a night went wrong
 
 **One wrinkle.** The iOS widget extension runs in a separate process and cannot read the SQLite file.
@@ -280,6 +324,8 @@ the cost of getting proximity wrong is being woken at 03:00.
 | iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 9 measures the truth |
 | Two native modules now (AlarmKit + beacons) | Medium | Both are Expo-dev-build compatible; neither works in Expo Go |
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
+| **The grace period becomes a repeatable bypass** — break proximity, get 5 quiet minutes, repeat | Medium, and easy to fall into | Cap graces per session, then sound immediately. Open question 2 |
+| Session state and live alarm state disagree after a crash mid-transition | Medium, silent | Sessions are the durable record (D15); rehydrate from them on cold launch rather than from alarm state |
 | Force-quitting the app defeats re-arm | Accepted | Out of scope — the adversary is a sleepy user, not an attacker |
 
 ## 12. Testing and CI
@@ -344,20 +390,27 @@ Named so the audit does not treat them as gaps:
 
 ## 14. Open questions
 
-1. **Give-up window** for Feature A — 20 minutes of no interaction? Untested guess.
-2. **Should the re-arm delay escalate?** A flat 20s is the simple version; 20 → 15 → 10 makes
-   stalling progressively worse. Unknown whether the added pressure is worth the added complexity.
-3. **Proximity debounce window** — how many consecutive seconds of absence before the alarm resumes?
-   Purely empirical; step 9 exists to answer it.
-4. **Does a dock session survive a phone restart or app force-quit?** If not, the loophole is
-   "restart the phone". If so, it needs state that outlives the process.
-5. **What ends a dock session that was never properly ended** — phone died, beacon died, user was
-   away? A session that never closes will corrupt the next night.
-6. **Should Feature A be suppressed on nights Feature B is disabled** (e.g. no alarm tomorrow)? They
-   are independent by D10, which argues no — but docking with no morning alarm may be unwanted.
-7. **How long is the dock alarm's resume window?** Leave at 22:35, return at 22:50 — it should
-   resume. Return at 02:00, having been out all evening? Probably not; that night is over. The
-   boundary is undecided. (No longer a question for the wake alarm — D13 settles it.)
-8. **How fast is a confirmed exit in practice?** D12 is only usable if a genuine departure silences
-   the alarm within a minute or two. If iOS takes ten minutes to confirm, the rule is decorative and
-   the alarm rings all the way down the street anyway. Measurable in build step 11.
+The eight questions this document opened with are now settled — as D15–D19, the session rules in §5,
+and the defaults below. What remains is empirical: values that can only be set by running the thing.
+
+### Settled defaults, to be tuned in use
+
+| Setting | Default | Basis |
+| --- | --- | --- |
+| Give-up window (Feature A) | 20 min of no interaction | Accepted as a starting guess |
+| Re-arm delay | 20s → 15s → 10s, floor 10s | Escalating (D18). The floor stops it becoming unsatisfiable — below roughly 10s you cannot cross a room before it fires again |
+| Proximity debounce | 60s of continuous non-detection | Long enough to ride out occlusion (a body between phone and beacon, the phone face-down), short enough to catch a real pickup. Never act on a single missed advertisement. iOS imposes its own beacon-exit delay on top |
+| Grace before a resumed alarm sounds | User-set: 30s / 1 min / 5 min | D17 |
+| Session duration | User-set hours from start | D16 |
+| Home radius | User-set, floor 100m | D14 |
+
+### Genuinely open
+
+1. **Is 60s the right proximity debounce?** Chosen on reasoning, not measurement. Build step 9's
+   observation period exists to replace it with a number derived from real overnight logs. It is the
+   single value most likely to be wrong, and being wrong means either a false alarm or a bypass.
+2. **Does the grace period leak into a bypass?** With a 5-minute grace, a proximity break gives five
+   minutes of phone use before anything sounds — repeatedly, if each break restarts the grace. It
+   probably needs a cap: N graces per session, then it sounds immediately.
+3. **How fast is confirmed exit in practice?** D19 should make it near-instant, but that assumes a
+   clean GPS fix is available quickly from indoors near a door. Measurable in build step 11.
