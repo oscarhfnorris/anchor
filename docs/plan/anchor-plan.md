@@ -227,7 +227,7 @@ Each is load-bearing. Changing one changes the design.
 | D28 | Clearing the wake alarm **ends any open dock session** | Extends the §2 seam. Otherwise the session outlives the morning and carrying the phone to Tag B trips a dock alarm minutes after getting up |
 | D29 | A missed firing is **inferred lazily**: on launch, any occurrence past due with no `fired_at` is a miss | If the bridge fails, the app is never launched, so nothing is running to record the failure at the time. Detection has to be retrospective or D25 does not work at all |
 | D30 | There are **many places**, not one home. Every rule that said "the home region" means **the active place** | Living across two or three addresses is normal. A single hard-coded home makes the app useless at the second one |
-| D31 | A role accepts **any of its registered UIDs**, not one tag | This is what makes multi-location work with no other machinery: a morning tag in each kitchen, and whichever you reach satisfies the alarm. v1 needs nothing beyond this |
+| D31 | A role accepts **any of its registered UIDs**, not one tag | This is what makes multi-location work with no other machinery: a morning tag in each kitchen, and whichever you reach satisfies the alarm. Phase 1 needs nothing beyond this |
 | D32 | Schedules are **global**; places carry hardware and geography only | Per-place schedules mean arriving somewhere new and silently having no alarm. Your wake time does not depend on which bed you woke in |
 | D33 | Features **degrade per place** according to the hardware installed there, and the app says so at setup | Partial kit is the normal case — full setup at home, two tags at a parent's, nothing in a hotel. A place with a dock tag but no beacon runs Feature A unenforced, which the user must be told rather than left to discover |
 | D34 | Tags may be **fixed or portable**; a portable tag belongs to no place | Fixed tags cannot cover hotels, travel, or a first night somewhere new. Portability is what makes the app work anywhere, and D35 is what stops it being a free pass |
@@ -315,7 +315,7 @@ This is the piece that makes multi-location work with almost no machinery. A rol
 `morning` — accepts **any** of its registered UIDs. Stick a morning tag in each kitchen and the wake
 alarm is satisfied by whichever one you reach.
 
-**v1 needs nothing more than this.** No regions, no beacons, no place records — just more tags bound
+**Phase 1 needs nothing more than this.** No regions, no beacons, no place records — just more tags bound
 to the same role. Places only become necessary for Feature A, which is the one that needs to know
 *where* the dock is and which beacon guards it.
 
@@ -664,7 +664,7 @@ the cost of getting proximity wrong is being woken at 03:00.
 | iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 9 measures the truth |
 | Two native modules now (AlarmKit + beacons) | Medium | Both are Expo-dev-build compatible; neither works in Expo Go |
 | App Review may reject an un-dismissible alarm | Medium, deferred | Tagdawn ships the same pattern; irrelevant until shipping |
-| The grace period becomes a repeatable bypass | **Accepted, not mitigated** | Judged unrealistic: repeatedly breaking proximity at home to farm five-minute windows is more effort than picking the phone up and ignoring the app. No cap in v1; revisit only if it happens |
+| The grace period becomes a repeatable bypass | **Accepted, not mitigated** | Judged unrealistic: repeatedly breaking proximity at home to farm five-minute windows is more effort than picking the phone up and ignoring the app. No cap; revisit only if it happens |
 | Session, alarm, and mirror state disagree after a crash | Medium, silent | Reconciliation (§12): SQLite holds intent, AlarmKit and the mirror are derived, reconcile idempotently on launch and foreground |
 | **Location Always silently downgraded to While Using** → every geofence rule fails quietly | Highest, and silent | Treat as a blocking state (§8): Feature A refuses to arm, home screen says so. Never degrade silently |
 | **The project is never finished** — four phases for a personal tool | High, and the likeliest failure of all | Release is all-or-nothing by choice, so the usual mitigation of shipping early does not apply. What remains: Phase 1 is runnable on your own phone while the rest is built, and the two riskiest spikes sit as early as their dependencies allow |
