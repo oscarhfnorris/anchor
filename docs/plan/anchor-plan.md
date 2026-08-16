@@ -1442,6 +1442,13 @@ Named so the audit does not treat them as gaps:
 - **App blocking (FamilyControls).** Separate entitlement, weeks of Apple approval, and physical
   separation is the actual mechanism.
 - **Payments, accounts, sync, cloud.** No server is a decision (D8), not an omission.
+- **tRPC, or any RPC layer.** Its job is making a network boundary type-safe, and there is no network
+  boundary: the app is one TypeScript program in one process, so a repository function already
+  returns a typed value with nothing lost across a wire. The pieces a procedure would bring are
+  already placed — Zod validation sits at the edges where input genuinely arrives (a scanned tag, a
+  settings form), and there is no authorisation to do with one user on one device. The one real
+  cross-process boundary is the widget extension's App Group mirror; that deserves a validated
+  payload contract, and nothing else does.
 - **Snooze.** Possibly never. Deferred pending real use.
 
 ## 17. Open questions

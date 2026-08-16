@@ -68,6 +68,10 @@ file a pointer, so they stay in sync.
 - **`src/alarm/`** is the only place that may touch a platform alarm API, and the only place a
   `Platform.OS` check belongs.
 
+`src/db/*.ts` are repositories — the layer a tRPC router would *call*, not routers themselves.
+There is no RPC layer and should not be one (plan §16): nothing crosses a process boundary except
+the widget's App Group mirror, so a typed function call is already the whole contract.
+
 ## Every business rule has a test
 
 A rule in `core/` without a test is **unfinished**, not merely untested (plan §5, D37). The decision
