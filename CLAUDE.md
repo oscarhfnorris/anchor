@@ -77,6 +77,10 @@ file a pointer, so they stay in sync.
     next person to put domain logic in the data layer.
 - **`src/alarm/`** is the only place that may touch a platform alarm API, and the only place a
   `Platform.OS` check belongs.
+- **`src/services/`** is for the few things that are genuinely neither: they hold a `core/` decision
+  *and* a platform or database handle, and orchestrate between them. `reconcile` is the first.
+  Nothing here decides anything — if a service starts branching on a rule, that rule belongs in
+  `core/` and the service should be asking it.
 
 `src/db/*.ts` are repositories — the layer a tRPC router would *call*, not routers themselves.
 There is no RPC layer and should not be one (plan §16): nothing crosses a process boundary except
