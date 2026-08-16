@@ -24,6 +24,8 @@
     "test:watch": "vitest",
     "doctor": "npx expo-doctor",
     "db:generate": "drizzle-kit generate",
+    "docs:progress": "node ./scripts/gen-progress.mjs",
+    "docs:progress:check": "node ./scripts/gen-progress.mjs --check",
     "help": "node ./scripts/help.mjs"
   },
   "dependencies": {
