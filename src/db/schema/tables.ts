@@ -50,8 +50,8 @@ export const BOUNDS = {
   hour: { min: 0, max: 23 },
   minute: { min: 0, max: 59 },
   weekday: { min: 0, max: 6 },
-  /** Below roughly ten seconds you cannot cross a room before it fires again (D18). */
-  rearmSecondsMin: 10,
+  rearmSecondsMin: 10, // D18: below ~10s you cannot cross a room before it fires again
+
   settingsSingletonId: 1,
 } as const;
 

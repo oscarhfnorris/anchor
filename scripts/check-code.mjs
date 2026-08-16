@@ -1,5 +1,10 @@
 /**
- * `check:code` — the gate, and half the definition of done alongside `npm test`.
+ * `check:code` — the static half of the gate. `npm test` is the other half and stays separate.
+ *
+ * Deliberately does **not** run the tests. The house rule is that `npm test` *and* `npm run
+ * check:code` must both be green; folding one into the other makes that rule say nothing, and it
+ * couples a fast static check to a suite you often want to run on its own. Two commands, two
+ * answers.
  *
  * One orchestrator rather than a chain of `&&`, so the output is ours to control: tasks run
  * concurrently, each task's output stays grouped under its own tag instead of interleaving, and the
@@ -7,6 +12,8 @@
  *
  * `doctor` is network-dependent, so it degrades to a warning rather than failing the gate. A check
  * that cannot run on a train is a check that gets bypassed, and a bypassed gate protects nothing.
+ *
+ * Tests run separately — see `npm test`.
  *
  * CI runs this same command with no extra flags. The moment local and CI diverge, a green local run
  * stops meaning anything.
@@ -16,11 +23,10 @@ import { spawn } from 'node:child_process';
 const TASKS = [
   { name: 'lint', cmd: 'npm', args: ['run', '--silent', 'lint'] },
   { name: 'types', cmd: 'npm', args: ['run', '--silent', 'type-check'] },
-  { name: 'test', cmd: 'npm', args: ['run', '--silent', 'test'] },
   { name: 'doctor', cmd: 'npm', args: ['run', '--silent', 'doctor'], softFail: true },
 ];
 
-const COLOURS = { lint: 36, types: 35, test: 32, doctor: 33 };
+const COLOURS = { lint: 36, types: 35, doctor: 33 };
 const useColour = process.stdout.isTTY && !process.env.NO_COLOR;
 const tag = (n) => (useColour ? `[${COLOURS[n] ?? 37}m${n}[0m` : n);
 

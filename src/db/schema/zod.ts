@@ -50,12 +50,11 @@ const hour = z.number().int().min(BOUNDS.hour.min).max(BOUNDS.hour.max);
 const minute = z.number().int().min(BOUNDS.minute.min).max(BOUNDS.minute.max);
 
 export const zodSchemas = {
+  // tagRole is global to the tag, never per-place (D22). alarmKind's two features are independent
+  // (D10). An occurrence's `missed` outcome is inferred lazily on launch, never written live (D29).
   enums: {
-    /** A tag's role. Global to the tag, never per-place (D22). */
     tagRole: z.enum(['dock', 'morning']),
-    /** Which feature an alarm belongs to. The two are independent (D10). */
     alarmKind: z.enum(['dock', 'wake']),
-    /** How an occurrence ended. `missed` is inferred lazily on launch, never written live (D29). */
     occurrenceOutcome: z.enum(['cleared', 'escapeHatch', 'confirmedExit', 'gaveUp', 'missed']),
     weekday,
     uid,
