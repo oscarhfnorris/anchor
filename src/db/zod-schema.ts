@@ -18,6 +18,8 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from 'drizzle-zod';
 import { z } from 'zod';
 
+import type { Weekday } from '../core/schedule';
+import type { AlarmKind, TagRole } from '../core/types';
 import { alarmDays, alarms, appSettings, occurrences, tags } from './schema';
 
 /**
@@ -143,7 +145,22 @@ export type Occurrence = z.infer<typeof zodSchemas.tables.occurrences.selectSche
 export type NewOccurrence = z.infer<typeof zodSchemas.tables.occurrences.insertSchema>;
 export type AlarmWithDays = z.infer<typeof alarmWithDaysSchema>;
 
-export type TagRole = z.infer<typeof zodSchemas.enums.tagRole>;
-export type AlarmKind = z.infer<typeof zodSchemas.enums.alarmKind>;
+/**
+ * The vocabulary is owned by `core/`, not redefined here.
+ *
+ * These were briefly declared in both places. They were structurally identical, so TypeScript
+ * accepted assignments between them and the duplication was invisible — until someone added a role
+ * in one place and the other silently disagreed. `core/` cannot import from `db/` (the purity rule),
+ * so the definition has to live there and this layer derives from it.
+ *
+ * The assertions below are the guard: if a Zod enum stops covering exactly the union `core/`
+ * declares, this file stops compiling.
+ */
+export type { AlarmKind, TagRole, Weekday };
 export type OccurrenceOutcome = z.infer<typeof zodSchemas.enums.occurrenceOutcome>;
-export type Weekday = z.infer<typeof zodSchemas.enums.weekday>;
+
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _tagRoleMatchesCore: Exact<z.infer<typeof zodSchemas.enums.tagRole>, TagRole> = true;
+const _alarmKindMatchesCore: Exact<z.infer<typeof zodSchemas.enums.alarmKind>, AlarmKind> = true;
+void _tagRoleMatchesCore;
+void _alarmKindMatchesCore;

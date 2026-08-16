@@ -7,8 +7,8 @@ scanning test titles, counts from the files on disk. A status doc maintained by 
 to update it later, and this project has already watched two documents drift from the code inside
 a single day.
 
-At a glance: **Phase 0 complete, Phase 1 partly built.** 14 of 38 decisions (37%) are
-covered by a running test, across 110 tests in 10 files and 5 commits.
+At a glance: **Phase 0 complete, Phase 1 partly built.** 15 of 38 decisions (39%) are
+covered by a running test, across 123 tests in 13 files and 6 commits.
 
 ## Phases
 
@@ -38,7 +38,7 @@ D37 makes the plan's decision table the test checklist: a rule in `core/` withou
 unfinished, not merely untested. Coverage is measured by scanning test titles for decision
 references, with comments stripped — describing how to test something does not count as testing it.
 
-**14 / 38 covered.**
+**15 / 38 covered.**
 
 <details><summary>Covered</summary>
 
@@ -55,6 +55,7 @@ references, with comments stripped — describing how to test something does not
 - **D27** — An alarm cannot be enabled without its clearing tag registered, and deleting a tag di…
 - **D29** — A missed firing is inferred lazily: on launch, any occurrence past due with no fired_…
 - **D31** — A role accepts any of its registered UIDs, not one tag
+- **D34** — Tags may be fixed or portable; a portable tag belongs to no place
 - **D35** — For portable tags only, a scan is accepted after N steps since the alarm first rang (…
 
 </details>
@@ -81,7 +82,6 @@ references, with comments stripped — describing how to test something does not
 - **D30** — There are many places, not one home. Every rule that said "the home region" means the…
 - **D32** — Schedules are global; places carry hardware and geography only
 - **D33** — Features degrade per place according to the hardware installed there, and the app say…
-- **D34** — Tags may be fixed or portable; a portable tag belongs to no place
 - **D36** — Every phase ends with a building, working app. No phase may leave it half-wired
 - **D37** — Every business rule has a test. A rule in core/ without one is unfinished, not merely…
 - **D38** — Charging state vetoes a proximity alarm. If the phone is still charging, it has not b…
@@ -94,7 +94,7 @@ Tests are co-located, so a module with no test file beside it is visible here.
 
 | Module | Co-located tests |
 | --- | --- |
-| `src/alarm/engine.fake.ts` | — |
+| `src/alarm/engine.fake.ts` | 9 |
 | `src/alarm/types.ts` | — |
 | `src/core/lockout.ts` | 7 |
 | `src/core/occurrences.ts` | 15 |
@@ -103,25 +103,30 @@ Tests are co-located, so a module with no test file beside it is visible here.
 | `src/core/tags.ts` | 14 |
 | `src/core/types.ts` | — |
 | `src/core/wake/reducer.ts` | 19 |
-| `src/db/alarms.ts` | 7 |
+| `src/db/alarms.ts` | 3 |
 | `src/db/client.ts` | — |
 | `src/db/schema.ts` | 6 |
 | `src/db/settings.ts` | 4 |
+| `src/db/tags.ts` | 5 |
+| `src/db/types.ts` | — |
 | `src/db/zod-schema.ts` | 17 |
 
 ## Tests
 
 | File | Tests |
 | --- | --- |
+| `src/__tests__/db.test.ts` | 3 |
+| `src/alarm/engine.fake.test.ts` | 9 |
 | `src/core/lockout.test.ts` | 7 |
 | `src/core/occurrences.test.ts` | 15 |
 | `src/core/registry.test.ts` | 9 |
 | `src/core/schedule.test.ts` | 12 |
 | `src/core/tags.test.ts` | 14 |
 | `src/core/wake/reducer.test.ts` | 19 |
-| `src/db/alarms.test.ts` | 7 |
+| `src/db/alarms.test.ts` | 3 |
 | `src/db/schema.test.ts` | 6 |
 | `src/db/settings.test.ts` | 4 |
+| `src/db/tags.test.ts` | 5 |
 | `src/db/zod-schema.test.ts` | 17 |
-| **Total** | **110** |
+| **Total** | **123** |
 

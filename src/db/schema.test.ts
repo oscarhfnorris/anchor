@@ -1,62 +1,87 @@
 /**
- * Proves the harness itself, which every later phase depends on.
+ * The schema's own constraints.
  *
- * Phase 0 has no behaviour to test, but an empty suite is not a passing one — `vitest --run` exits
- * non-zero when it finds no test files. Rather than paper over that with `--passWithNoTests`, the
- * one thing Phase 0 genuinely can verify is the harness: that migrations apply, that foreign keys
- * are actually on, that Drizzle round-trips, and that the singleton CHECK bites.
- *
- * The foreign-keys assertion is the one that earns its place. The pragma is per-connection and is
- * not carried inside the serialized snapshot, so it is exactly the kind of thing that would be set
- * once on the template, silently lost on every restore, and only discovered on device.
+ * Only rules the tables enforce belong here — defaults, CHECKs, uniqueness. The Zod layer refuses
+ * the same things earlier and with a readable message (`zod-schema.test.ts`); these prove the last
+ * line still holds, because a bad row must never reach disk even if it arrives from a path that
+ * skipped validation.
  */
-import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { appSettings } from './schema';
 import { createTestDb, type TestDb } from '../__tests__/db';
+import { alarms, appSettings, occurrences } from './schema';
 
-describe('test database harness', () => {
+const NOW = 1_700_000_000_000;
+
+describe('app_settings', () => {
   let ctx: TestDb;
-
   beforeEach(() => {
     ctx = createTestDb();
     return () => ctx.close();
   });
 
-  it('restores an already-migrated database', () => {
-    const tables = ctx.sqlite
-      .prepare("select name from sqlite_master where type = 'table'")
-      .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toContain('app_settings');
-  });
-
-  it('has foreign keys enabled on every restored connection', () => {
-    expect(ctx.sqlite.pragma('foreign_keys', { simple: true })).toBe(1);
-  });
-
-  it('round-trips a write through Drizzle', async () => {
-    await ctx.db.insert(appSettings).values({ id: 1, updatedAt: 1_700_000_000_000 });
-    const rows = await ctx.db.select().from(appSettings).where(eq(appSettings.id, 1));
-    expect(rows[0]?.updatedAt).toBe(1_700_000_000_000);
-  });
-
-  it('applies the schema defaults', async () => {
-    await ctx.db.insert(appSettings).values({ id: 1, updatedAt: 1 });
+  it('applies the documented defaults', async () => {
+    await ctx.db.insert(appSettings).values({ id: 1, updatedAt: NOW });
     const rows = await ctx.db.select().from(appSettings);
     expect(rows[0]?.stepThreshold).toBe(15);
     expect(rows[0]?.rearmSeconds).toBe(20);
   });
 
-  it('rejects a second settings row via the singleton CHECK', async () => {
-    await ctx.db.insert(appSettings).values({ id: 1, updatedAt: 1 });
-    await expect(ctx.db.insert(appSettings).values({ id: 2, updatedAt: 2 })).rejects.toThrow(
+  it('rejects a second row via the singleton CHECK', async () => {
+    await ctx.db.insert(appSettings).values({ id: 1, updatedAt: NOW });
+    await expect(ctx.db.insert(appSettings).values({ id: 2, updatedAt: NOW })).rejects.toThrow(
       /CHECK constraint failed/i,
     );
   });
+});
 
-  it('isolates databases between tests', async () => {
-    const rows = await ctx.db.select().from(appSettings);
-    expect(rows).toHaveLength(0);
+describe('alarms', () => {
+  let ctx: TestDb;
+  beforeEach(() => {
+    ctx = createTestDb();
+    return () => ctx.close();
+  });
+
+  it('rejects an out-of-range hour at the database, not only in Zod', async () => {
+    await expect(
+      ctx.db
+        .insert(alarms)
+        .values({ kind: 'wake', hour: 24, minute: 0, createdAt: NOW, updatedAt: NOW }),
+    ).rejects.toThrow(/CHECK constraint failed/i);
+  });
+
+  it('allows only one alarm per feature (D10)', async () => {
+    await ctx.db
+      .insert(alarms)
+      .values({ kind: 'wake', hour: 7, minute: 0, createdAt: NOW, updatedAt: NOW });
+    await expect(
+      ctx.db
+        .insert(alarms)
+        .values({ kind: 'wake', hour: 8, minute: 0, createdAt: NOW, updatedAt: NOW }),
+    ).rejects.toThrow(/UNIQUE/i);
+  });
+});
+
+describe('occurrences', () => {
+  let ctx: TestDb;
+  beforeEach(async () => {
+    ctx = createTestDb();
+    await ctx.db
+      .insert(alarms)
+      .values({ id: 1, kind: 'wake', hour: 7, minute: 0, createdAt: NOW, updatedAt: NOW });
+    return () => ctx.close();
+  });
+
+  it('cannot hold two rows for the same firing, which keeps reconcile idempotent', async () => {
+    await ctx.db.insert(occurrences).values({ alarmId: 1, dueAt: NOW, createdAt: NOW });
+    await expect(
+      ctx.db.insert(occurrences).values({ alarmId: 1, dueAt: NOW, createdAt: NOW }),
+    ).rejects.toThrow(/UNIQUE/i);
+  });
+
+  it('refuses an occurrence for an alarm that does not exist', async () => {
+    await expect(
+      ctx.db.insert(occurrences).values({ alarmId: 999, dueAt: NOW, createdAt: NOW }),
+    ).rejects.toThrow(/FOREIGN KEY/i);
   });
 });

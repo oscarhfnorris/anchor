@@ -7,15 +7,12 @@
  * into every test that touches settings, and none of it would run in Node.
  */
 import { eq } from 'drizzle-orm';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
+import type { AnySqliteDb } from './types';
 import { appSettings } from './schema';
 import type { AppSettings } from './zod-schema';
 
 export const SINGLETON_ID = 1;
-
-/** Either driver's handle: `expo-sqlite` on device, `better-sqlite3` in tests. */
-export type AnySqliteDb = BaseSQLiteDatabase<'sync' | 'async', unknown, Record<string, unknown>>;
 
 export async function readSettings(db: AnySqliteDb): Promise<AppSettings | undefined> {
   const rows = await db.select().from(appSettings).where(eq(appSettings.id, SINGLETON_ID));

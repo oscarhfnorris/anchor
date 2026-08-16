@@ -16,6 +16,12 @@
 /** Which feature a rule belongs to. The two are siblings, never a pipeline (D10). */
 export type Feature = 'dock' | 'wake';
 
+/**
+ * Which alarm an action concerns. Same values as `Feature`, named for the alarm rather than the
+ * feature, because that is how the database and the UI talk about it.
+ */
+export type AlarmKind = 'dock' | 'wake';
+
 /** A tag's role. Global to the tag and never per-place (D22). */
 export type TagRole = 'dock' | 'morning';
 
