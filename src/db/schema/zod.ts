@@ -26,7 +26,15 @@ import { z } from 'zod';
 
 import type { Weekday } from '../../core/schedule';
 import type { AlarmKind, TagRole } from '../../core/types';
-import { alarmDays, alarms, appSettings, BOUNDS, occurrences, tags } from './tables';
+import {
+  alarmDays,
+  alarms,
+  appSettings,
+  BOUNDS,
+  occurrenceEvents,
+  occurrences,
+  tags,
+} from './tables';
 
 /**
  * A tag UID as stored: lowercase hex, separators already stripped.
@@ -50,12 +58,11 @@ const hour = z.number().int().min(BOUNDS.hour.min).max(BOUNDS.hour.max);
 const minute = z.number().int().min(BOUNDS.minute.min).max(BOUNDS.minute.max);
 
 export const zodSchemas = {
+  // tagRole is global to the tag, never per-place (D22). alarmKind's two features are independent
+  // (D10). An occurrence's `missed` outcome is inferred lazily on launch, never written live (D29).
   enums: {
-    /** A tag's role. Global to the tag, never per-place (D22). */
     tagRole: z.enum(['dock', 'morning']),
-    /** Which feature an alarm belongs to. The two are independent (D10). */
     alarmKind: z.enum(['dock', 'wake']),
-    /** How an occurrence ended. `missed` is inferred lazily on launch, never written live (D29). */
     occurrenceOutcome: z.enum(['cleared', 'escapeHatch', 'confirmedExit', 'gaveUp', 'missed']),
     weekday,
     uid,
@@ -118,6 +125,12 @@ export const zodSchemas = {
       selectSchema: createSelectSchema(alarmDays),
     },
 
+    occurrenceEvents: {
+      insertSchema: createInsertSchema(occurrenceEvents, { at: instant }),
+      updateSchema: createUpdateSchema(occurrenceEvents),
+      selectSchema: createSelectSchema(occurrenceEvents, { at: instant }),
+    },
+
     occurrences: {
       insertSchema: createInsertSchema(occurrences, {
         dueAt: instant,
@@ -157,6 +170,8 @@ export type Alarm = z.infer<typeof zodSchemas.tables.alarms.selectSchema>;
 export type NewAlarm = z.infer<typeof zodSchemas.tables.alarms.insertSchema>;
 export type AlarmDay = z.infer<typeof zodSchemas.tables.alarmDays.selectSchema>;
 export type Occurrence = z.infer<typeof zodSchemas.tables.occurrences.selectSchema>;
+export type OccurrenceEvent = z.infer<typeof zodSchemas.tables.occurrenceEvents.selectSchema>;
+export type OccurrenceEventKind = OccurrenceEvent['kind'];
 export type NewOccurrence = z.infer<typeof zodSchemas.tables.occurrences.insertSchema>;
 export type AlarmWithDays = z.infer<typeof alarmWithDaysSchema>;
 

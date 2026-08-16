@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 
 import { canEnable, hasClearingTag as hasClearingTagFor, type AlarmKind, type EnableVerdict } from '../../core/registry';
 import { alarmDays, alarms, zodSchemas, type Alarm, type Weekday } from '../schema';
+import { invalidateFuture } from './occurrences';
 import { readRegistry } from './tags';
 import type { AnySqliteDb } from '../types';
 
@@ -58,7 +59,13 @@ async function setEnabled(db: AnySqliteDb, kind: AlarmKind, enabled: boolean, no
   await db.update(alarms).set(patch).where(eq(alarms.kind, kind));
 }
 
-/** Change an alarm's wall-clock time. Refused before it reaches the CHECK, with a readable reason. */
+/**
+ * Change an alarm's wall-clock time.
+ *
+ * Invalidates the unresolved future occurrences it already materialised, because they hold absolute
+ * instants computed from the old time — leaving them would keep the old alarms scheduled and make
+ * the change purely cosmetic. Resolved rows are never touched; they are the history.
+ */
 export async function setAlarmTime(
   db: AnySqliteDb,
   kind: AlarmKind,
@@ -68,6 +75,9 @@ export async function setAlarmTime(
 ): Promise<void> {
   const patch = alarmUpdate.parse({ hour, minute, updatedAt: now });
   await db.update(alarms).set(patch).where(eq(alarms.kind, kind));
+
+  const alarm = (await readAlarms(db)).find((a) => a.kind === kind);
+  if (alarm) await invalidateFuture(db, alarm.id, now);
 }
 
 /** The active weekdays for an alarm, ascending. */

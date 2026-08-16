@@ -4,7 +4,8 @@ Written by hand, because the part worth recording is *why* things are where they
 not come out of a script. The one number that rots is deliberately not asserted here — run
 `npm run check:rules` for live decision coverage.
 
-Last reviewed against the plan: after the data-layer restructure.
+Last reviewed against the plan: after the overnight build — occurrences, reconciliation, the wake
+service, the night simulator and the golden traces.
 
 ---
 
@@ -30,9 +31,10 @@ The critical path is not code. It is £99 and an entitlement queue of unknown le
 | Area | Modules |
 | --- | --- |
 | Domain (`core/`) | `tags` · `schedule` · `lockout` · `registry` · `occurrences` · `wake/reducer` · `types` |
-| Platform seam (`alarm/`) | `types` (the `AlarmEngine` interface) · `engine.fake` |
-| Data (`db/`) | `schema/tables` · `schema/zod` · `repositories/{alarms,tags,settings}` · `client` |
-| UI (`app/`) | The status screen — Phase 1 grows this same route into the home screen |
+| Platform seams | `alarm/` — interface, iOS adapter (unverified), Android stub, fake · `nfc/` — interface and fake |
+| Data (`db/`) | `schema/{tables,zod}` · `repositories/{alarms,tags,settings,occurrences}` · `client` |
+| Services | `reconcile` · `wake-service` · `night-simulator` |
+| UI (`app/`) | The status screen, now reporting missed alarms (D25) |
 
 ## Decisions: what "covered" actually means
 
@@ -46,6 +48,7 @@ The honest breakdown:
 
 | | Why it is genuinely done |
 | --- | --- |
+| **D25** records whether it fired | End to end now: the occurrence is written when it rings, resolved when it clears, and a past-due row with no `fired_at` is reported on the home screen |
 | **D1** UID identity | Normalisation, hex-only, empty never matches — in `core/`, in the repository, and refused by the insert schema so an unnormalised value cannot reach the table |
 | **D7** settings freeze | Symmetric window, both sides of the alarm, with the reason surfaced so the UI can explain the refusal |
 | **D10** feature independence | Asserted three ways: the reducer ignores the other feature's events, deleting a tag touches only its own alarm, and the schema permits one alarm per kind |
@@ -64,7 +67,6 @@ The honest breakdown:
 | **D2** re-arm not block | The reducer reschedules rather than dismissing | Whether AlarmKit actually re-arms in time. That is build step 5's spike and a fake cannot answer it |
 | **D5** B never gives up | The wake alarm survives 200 Stop presses | Feature A's give-up window — Phase 3 |
 | **D23** wall-clock time | Schedules, including the 23- and 25-hour DST days | Session duration as absolute elapsed time — Phase 4 |
-| **D25** records whether it fired | The reducer emits `recordOccurrence`, and the miss query reads it | Nothing writes to the `occurrences` table yet; there is no occurrences repository |
 | **D34** fixed or portable | Portable, and that every tag is portable while places do not exist | Fixed tags — Phase 2, when a tag can have a place |
 
 ### Outstanding
@@ -99,6 +101,14 @@ Recorded because a plan that quietly stops matching reality is worse than no pla
 - **The bridge numbers weekdays 1–7** where `Date#getDay` uses 0–6. Converted at the seam only.
 - **`expo-alarm-kit` needs an App Group**, which the plan did not account for when calling the
   simulator spike free.
+- **`getAllAlarms()` is a mirror, not the OS.** It lists keys the bridge wrote into App Group
+  storage and never asks AlarmKit, so reconciliation compares intent against a second mirror rather
+  than reality. Blind re-issue is therefore the primary strategy, not a fallback.
+- **The alerting state was held in memory**, which iOS destroys on every alarm dismissal — so the
+  re-arm delay would never have shortened and the step gate would have restarted on every press.
+  Both silent. Now derived from stored occurrences and their event log.
+- **Squashing migrations breaks an installed app.** Observed on the simulator: a regenerated `0000`
+  fails against a database that already has the tables.
 
 ## Where the architecture moved
 
@@ -119,6 +129,17 @@ repository credentials.
 
 No device builds: macOS runners cost roughly ten times the minutes, and everything worth gating is
 platform-agnostic by construction. Device builds go through EAS on demand.
+
+## What is built but not yet connected to the app
+
+Honest gap rather than an oversight. The services exist and are tested; the screen does not call
+them, because doing so needs an `AlarmEngine` and the only real one is `engine.ios.ts`, which cannot
+run without the App Group and entitlement. Wiring an unverified native adapter into launch would risk
+the one thing currently proven to work.
+
+So the app still shows migration state, a database round trip and missed alarms — all real — and
+`reconcile`, `dispatch` and `scanToClear` wait for the account. That connection is a small piece of
+work once the spike passes, and it is the first thing to do then.
 
 ## Next
 

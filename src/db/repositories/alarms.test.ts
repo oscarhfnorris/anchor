@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createTestDb, type TestDb } from '../../__tests__/db';
-import { enableAlarm, hasClearingTag } from './alarms';
+import { enableAlarm, hasClearingTag, setAlarmTime } from './alarms';
 import { alarms, tags } from '../schema';
 
 const NOW = 1_700_000_000_000;
@@ -47,6 +47,21 @@ describe('D27 — an alarm cannot be enabled with nothing to clear it', () => {
     await seedTag(ctx, '04a2b3c4', 'morning');
     expect(await enableAlarm(ctx.db, 'wake', NOW)).toEqual({ ok: true });
     expect(await isEnabled(ctx, 'wake')).toBe(true);
+  });
+
+  it('invalidates future occurrences when the time changes, so the change is not cosmetic', async () => {
+    const { materialise, readOccurrences, recordFired } = await import('./occurrences');
+    await materialise(ctx.db, 1, [NOW + 3_600_000, NOW + 7_200_000], NOW);
+    const past = NOW - 3_600_000;
+    await materialise(ctx.db, 1, [past], past);
+    const [old] = (await readOccurrences(ctx.db, 1)).filter((o) => o.dueAt === past);
+    await recordFired(ctx.db, old!.id, past);
+
+    await setAlarmTime(ctx.db, 'wake', 8, 30, NOW);
+
+    const remaining = await readOccurrences(ctx.db, 1);
+    // The two future ones are gone; the fired one stays, because it is history.
+    expect(remaining.map((o) => o.dueAt)).toEqual([past]);
   });
 
   it('does not accept a dock tag as clearing the wake alarm', async () => {

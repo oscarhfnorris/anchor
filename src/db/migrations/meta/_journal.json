@@ -8,6 +8,13 @@
       "when": 1786840395510,
       "tag": "0000_vengeful_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786843233237,
+      "tag": "0001_fantastic_luke_cage",
+      "breakpoints": true
     }
   ]
 }

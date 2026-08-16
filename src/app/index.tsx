@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import migrations from '@/db/migrations/migrations';
 import { db } from '@/db/client';
 import { readSettings, touchSettings } from '@/db/repositories';
+import { readMissed } from '@/db/repositories';
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -31,6 +32,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function StatusScreen() {
   const { success, error } = useMigrations(db, migrations);
   const [roundTrip, setRoundTrip] = useState<string>('tap to run');
+  const [missed, setMissed] = useState<string>('not checked');
 
   const runRoundTrip = useCallback(async () => {
     try {
@@ -44,6 +46,22 @@ export default function StatusScreen() {
     }
   }, []);
 
+  /**
+   * The watchdog, made visible (D25).
+   *
+   * An alarm that did not ring and said nothing is the worst thing this app can do, and detection is
+   * retrospective by necessity — if the bridge fails, nothing is running at the time to notice. So
+   * the check happens here, on the screen you open in the morning.
+   */
+  const checkMissed = useCallback(async () => {
+    try {
+      const rows = await readMissed(db, Date.now());
+      setMissed(rows.length === 0 ? 'none' : `${rows.length} alarm(s) did not fire`);
+    } catch (e) {
+      setMissed(`check failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
   const migrationState = error ? `failed — ${error.message}` : success ? 'applied' : 'running…';
 
   return (
@@ -54,7 +72,7 @@ export default function StatusScreen() {
             Anchor
           </Text>
           <Text className="text-sm text-neutral-500">
-            Phase 0 — the template. No alarms yet.
+            Phase 1 — the alarm core. No NFC or AlarmKit yet.
           </Text>
         </View>
 
@@ -64,6 +82,15 @@ export default function StatusScreen() {
           </Text>
           <Row label="Migrations" value={migrationState} />
           <Row label="Round trip" value={roundTrip} />
+          <Row label="Missed alarms" value={missed} />
+          <Pressable
+            onPress={checkMissed}
+            className="mt-2 items-center rounded-lg border border-neutral-300 px-4 py-3 active:opacity-80 dark:border-neutral-700"
+          >
+            <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              Check for missed alarms
+            </Text>
+          </Pressable>
           <Pressable
             onPress={runRoundTrip}
             className="mt-2 items-center rounded-lg bg-neutral-900 px-4 py-3 active:opacity-80 dark:bg-neutral-100"

@@ -13,5 +13,6 @@
  * breaks — that is the domain layer, in `core/`. These ask and apply.
  */
 export * from './alarms';
+export * from './occurrences';
 export * from './settings';
 export * from './tags';

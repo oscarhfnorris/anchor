@@ -50,8 +50,8 @@ export const BOUNDS = {
   hour: { min: 0, max: 23 },
   minute: { min: 0, max: 59 },
   weekday: { min: 0, max: 6 },
-  /** Below roughly ten seconds you cannot cross a room before it fires again (D18). */
-  rearmSecondsMin: 10,
+  rearmSecondsMin: 10, // D18: below ~10s you cannot cross a room before it fires again
+
   settingsSingletonId: 1,
 } as const;
 
@@ -168,4 +168,34 @@ export const occurrences = sqliteTable(
     // The D29 miss query, which runs on every launch.
     index('occurrences_unfired_idx').on(t.dueAt).where(sql`fired_at is null`),
   ],
+);
+
+/**
+ * What happened during one occurrence, in order.
+ *
+ * **This is what makes the alerting state durable.** iOS launches the app fresh when an alarm is
+ * dismissed — that is the whole re-arm mechanism (D2) — so every Stop press may arrive in a new
+ * process. Holding `rearmCount` in memory would reset it each time: the delay would never shorten
+ * (D18) and the step gate would restart from zero, so stalling would buy a fresh allowance on every
+ * press (D35). Both failures are silent and both reward the behaviour the app exists to prevent.
+ *
+ * Counters are derived by counting rows here rather than stored as a column, per the same reasoning
+ * the plan applies to sessions: a hand-synced count is a bug waiting for the one code path that
+ * forgets to increment it.
+ *
+ * It doubles as the record of why a night went wrong, which the plan asked for and nothing provided.
+ */
+export const occurrenceEvents = sqliteTable(
+  'occurrence_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    occurrenceId: integer('occurrence_id')
+      .notNull()
+      .references(() => occurrences.id, { onDelete: 'cascade' }),
+    kind: text('kind', {
+      enum: ['fired', 'stopPressed', 'scanRejected', 'cleared', 'escapeHatch'],
+    }).notNull(),
+    at: integer('at').notNull(),
+  },
+  (t) => [index('occurrence_events_occurrence_idx').on(t.occurrenceId)],
 );

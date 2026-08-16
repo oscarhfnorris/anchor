@@ -29,9 +29,9 @@ const GROUPS = [
   },
   {
     title: 'Before you call it done',
-    note: 'Both must be green. Tests prove behaviour; check:code proves the rules it depends on.',
+    note: 'Both must be green, and they are separate on purpose: tests prove behaviour,\n  check:code proves the rules that behaviour depends on are still enforced.',
     items: [
-      ['check:code', 'The gate: lint + types + tests + expo-doctor, run concurrently.'],
+      ['check:code', 'Static gate: lint + types + expo-doctor, run concurrently. Not the tests.'],
       ['test', 'Unit tests, once.'],
       ['test:watch', 'Unit tests, watching.'],
       ['check:rules', 'Advisory scan. Never fails the build. Prints how many decisions are stubbed.'],
