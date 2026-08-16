@@ -1,6 +1,12 @@
 /**
  * The single barrel for database validation and types.
  *
+ * **Only what the columns cannot say themselves is written here.** drizzle-zod derives enums from
+ * `text({ enum })`, nullability from `.notNull()`, optionality from `.default()` and boolean mode
+ * from the column — none of that is restated, and restating it is how the two drift. What it does
+ * not derive is CHECK constraints, so numeric ranges are refined below using `BOUNDS` from
+ * `schema.ts`, which is also what the constraints themselves are built from.
+ *
  * Everything that needs to know the shape of a row imports from here: Zod schemas for validating at
  * a boundary, and the types inferred from those same schemas so validation and types cannot drift
  * apart. `schema.ts` stays the Drizzle table definitions and nothing else.
@@ -20,7 +26,7 @@ import { z } from 'zod';
 
 import type { Weekday } from '../core/schedule';
 import type { AlarmKind, TagRole } from '../core/types';
-import { alarmDays, alarms, appSettings, occurrences, tags } from './schema';
+import { alarmDays, alarms, appSettings, BOUNDS, occurrences, tags } from './schema';
 
 /**
  * A tag UID as stored: lowercase hex, separators already stripped.
@@ -35,10 +41,13 @@ const uid = z
   .regex(/^[0-9a-f]+$/, 'UIDs are stored as normalised lowercase hex');
 
 /** 0 = Sunday, matching `Date#getDay` and `core/schedule.ts`. The bridge's 1–7 is converted at the seam. */
-const weekday = z.number().int().min(0).max(6);
+const weekday = z.number().int().min(BOUNDS.weekday.min).max(BOUNDS.weekday.max);
 
 /** Unix epoch milliseconds, UTC. Wall-clock times are hour/minute integers instead (D23). */
 const instant = z.number().int().nonnegative();
+
+const hour = z.number().int().min(BOUNDS.hour.min).max(BOUNDS.hour.max);
+const minute = z.number().int().min(BOUNDS.minute.min).max(BOUNDS.minute.max);
 
 export const zodSchemas = {
   enums: {
@@ -56,7 +65,7 @@ export const zodSchemas = {
   tables: {
     appSettings: {
       insertSchema: createInsertSchema(appSettings, {
-        id: z.literal(1, 'app_settings is a singleton'),
+        id: z.literal(BOUNDS.settingsSingletonId, 'app_settings is a singleton'),
         // `.optional()` is load-bearing: overriding a column in drizzle-zod replaces its generated
         // schema entirely, which discards the optionality a database default would have given it.
         // Without it these become required on insert and the defaults can never apply.
@@ -64,12 +73,16 @@ export const zodSchemas = {
         rearmSeconds: z
           .number()
           .int()
-          .min(10, 'Below ten seconds you cannot cross a room (D18)')
+          .min(BOUNDS.rearmSecondsMin, 'Below ten seconds you cannot cross a room (D18)')
           .optional(),
         updatedAt: instant,
       }),
       updateSchema: createUpdateSchema(appSettings),
-      selectSchema: createSelectSchema(appSettings),
+      selectSchema: createSelectSchema(appSettings, {
+        id: z.literal(BOUNDS.settingsSingletonId),
+        stepThreshold: z.number().int().min(0),
+        rearmSeconds: z.number().int().min(BOUNDS.rearmSecondsMin),
+      }),
     },
 
     tags: {
@@ -79,27 +92,29 @@ export const zodSchemas = {
         createdAt: instant,
         updatedAt: instant,
       }),
-      updateSchema: createUpdateSchema(tags, { uid }),
-      selectSchema: createSelectSchema(tags),
+      updateSchema: createUpdateSchema(tags, { uid: uid.optional() }),
+      selectSchema: createSelectSchema(tags, { uid }),
     },
 
     alarms: {
-      insertSchema: createInsertSchema(alarms, {
-        hour: z.number().int().min(0).max(23),
-        minute: z.number().int().min(0).max(59),
-        createdAt: instant,
-        updatedAt: instant,
-      }),
+      insertSchema: createInsertSchema(alarms, { hour, minute, createdAt: instant, updatedAt: instant }),
+      // Optional, because an update carries only the fields being changed. Overriding a column
+      // replaces its generated schema wholesale, and the generated one was already optional — the
+      // same trap as the defaults above, and it surfaces as "expected number, received undefined"
+      // on a patch that never mentioned the field.
       updateSchema: createUpdateSchema(alarms, {
-        hour: z.number().int().min(0).max(23),
-        minute: z.number().int().min(0).max(59),
+        hour: hour.optional(),
+        minute: minute.optional(),
       }),
-      selectSchema: createSelectSchema(alarms),
+      // The select schema carries the same bounds as the insert one. `createSelectSchema` derives
+      // fields from column *types* and knows nothing about CHECK constraints, so without these it
+      // would accept hour 25 — and parsing on read would prove nothing (see parse.ts).
+      selectSchema: createSelectSchema(alarms, { hour, minute }),
     },
 
     alarmDays: {
       insertSchema: createInsertSchema(alarmDays, { weekday }),
-      updateSchema: createUpdateSchema(alarmDays, { weekday }),
+      updateSchema: createUpdateSchema(alarmDays, { weekday: weekday.optional() }),
       selectSchema: createSelectSchema(alarmDays),
     },
 
@@ -125,8 +140,8 @@ export const zodSchemas = {
  */
 export const alarmWithDaysSchema = z.object({
   kind: zodSchemas.enums.alarmKind,
-  hour: z.number().int().min(0).max(23),
-  minute: z.number().int().min(0).max(59),
+  hour,
+  minute,
   enabled: z.boolean(),
   weekdays: z
     .array(weekday)

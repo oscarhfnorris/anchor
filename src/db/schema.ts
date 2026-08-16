@@ -26,6 +26,34 @@ import {
   unique,
 } from 'drizzle-orm/sqlite-core';
 
+/**
+ * Bounds that appear in two places by necessity.
+ *
+ * drizzle-zod derives everything a *column* can express — enums, nullability, defaults, boolean mode
+ * — so those are never restated. It does **not** read CHECK constraints, and SQLite has no type
+ * meaning "0 to 23", so a range has to be written as a CHECK here and as a Zod refinement there.
+ *
+ * Declaring the numbers once and using them in both is what stops that duplication drifting: change
+ * the bound and both the constraint and the validation move together.
+ */
+/**
+ * A literal number inside a `sql` template.
+ *
+ * Interpolating a plain number produces a **bound parameter**, so the CHECK is generated as
+ * `between ? and ?` — which is not a constraint at all, and the migration applies without complaint.
+ * `sql.raw` emits the digits. Safe here because these are our own constants, never user input.
+ */
+const lit = (n: number) => sql.raw(String(n));
+
+export const BOUNDS = {
+  hour: { min: 0, max: 23 },
+  minute: { min: 0, max: 59 },
+  weekday: { min: 0, max: 6 },
+  /** Below roughly ten seconds you cannot cross a room before it fires again (D18). */
+  rearmSecondsMin: 10,
+  settingsSingletonId: 1,
+} as const;
+
 export const appSettings = sqliteTable(
   'app_settings',
   {
@@ -34,7 +62,7 @@ export const appSettings = sqliteTable(
     rearmSeconds: integer('rearm_seconds').notNull().default(20),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [check('app_settings_singleton', sql`${t.id} = 1`)],
+  (t) => [check('app_settings_singleton', sql`${t.id} = ${lit(BOUNDS.settingsSingletonId)}`)],
 );
 
 
@@ -81,8 +109,8 @@ export const alarms = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [
-    check('alarms_hour', sql`${t.hour} between 0 and 23`),
-    check('alarms_minute', sql`${t.minute} between 0 and 59`),
+    check('alarms_hour', sql`${t.hour} between ${lit(BOUNDS.hour.min)} and ${lit(BOUNDS.hour.max)}`),
+    check('alarms_minute', sql`${t.minute} between ${lit(BOUNDS.minute.min)} and ${lit(BOUNDS.minute.max)}`),
   ],
 );
 
@@ -97,7 +125,10 @@ export const alarmDays = sqliteTable(
   },
   (t) => [
     primaryKey({ columns: [t.alarmId, t.weekday] }),
-    check('alarm_days_weekday', sql`${t.weekday} between 0 and 6`),
+    check(
+      'alarm_days_weekday',
+      sql`${t.weekday} between ${lit(BOUNDS.weekday.min)} and ${lit(BOUNDS.weekday.max)}`,
+    ),
   ],
 );
 
