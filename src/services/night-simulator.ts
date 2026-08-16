@@ -16,14 +16,17 @@
 import type { AlarmState, Context, Effect, Event } from '../core/types';
 import { reduce } from '../core/wake/reducer';
 
-/** One step of a scripted night: an event, optionally with the world changed first. */
+/**
+ * One step of a scripted night: an event, optionally with the world changed first.
+ *
+ * `at` is minutes since the night began and advances the clock; it never goes backwards. `world`
+ * changes apply from that step onward. `note` labels the beat, so a failing trace says which part
+ * of the night broke rather than only which line.
+ */
 export interface Step {
-  /** Minutes since the night began. Advances the clock; never goes backwards. */
   at: number;
   event: Event;
-  /** Changes to the world that apply from this step onward — steps taken, presence, and so on. */
   world?: Partial<Context>;
-  /** Free-text label, so a failing trace says which beat of the night broke. */
   note?: string;
 }
 
@@ -35,8 +38,8 @@ export interface Frame {
   effects: Effect[];
 }
 
+/** `startedAt` is the wall-clock instant the night begins from. */
 export interface NightOptions {
-  /** Wall-clock instant the night starts from. */
   startedAt: number;
   initial?: AlarmState;
   world?: Partial<Context>;

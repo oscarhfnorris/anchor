@@ -29,12 +29,14 @@ import {
 import type { AnySqliteDb } from '../db/types';
 import type { Weekday } from '../db/schema';
 
+/**
+ * What a reconcile did: how many occurrences it created to keep the horizon full, how many alarms it
+ * handed to the OS, and the past-due ones that never fired — that last being the thing the user must
+ * actually be told about (D25).
+ */
 export interface ReconcileReport {
-  /** Occurrences created to keep the horizon full. */
   materialised: number;
-  /** Alarms handed to the OS. */
   scheduled: number;
-  /** Past-due occurrences that never fired — the thing the user must be told about (D25). */
   missed: OccurrenceRow[];
 }
 
