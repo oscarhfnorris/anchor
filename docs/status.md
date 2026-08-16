@@ -83,7 +83,7 @@ None of this is a matter of effort.
 | --- | --- | --- |
 | NFC read | Core NFC returns *Sandbox restriction* on a free Personal Team | Paid Apple Developer account |
 | AlarmKit on device | Needs the `com.apple.developer.alarmkit` entitlement | The account, then an approval queue of unknown length |
-| The AlarmKit bridge at all | `expo-alarm-kit`'s `configure()` wants an App Group | The account. Whether the simulator tolerates one unprovisioned is unverified, and it undercuts the plan's claim that the spike is free |
+| ~~The AlarmKit bridge~~ | **Unblocked.** Verified on a simulator: the module links and iOS shows its real authorisation prompt with no account, entitlement or App Group | — |
 | Widget extension | App Groups | The account |
 | Phase 2 onward | §3's fortnight of real use, which is the mitigation for the plan's own highest-rated risk | Fourteen mornings |
 

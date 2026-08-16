@@ -13,7 +13,7 @@
       "infoPlist": {
         "NSAlarmKitUsageDescription": "Anchor uses alarms that can only be silenced away from your bed."
       },
-      "deploymentTarget": "26.0"
+      "deploymentTarget": "26.1"
     },
     "android": {
       "adaptiveIcon": {
