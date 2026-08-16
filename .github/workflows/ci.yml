@@ -1,0 +1,41 @@
+# The same gate the author runs locally, run again where forgetting is not possible.
+#
+# `npm run check:code` and nothing else: the moment CI and local diverge, a green local run stops
+# meaning anything. If a check belongs in CI it belongs in check:code, and vice versa.
+#
+# Ubuntu, not macOS. No device builds here — macOS runners cost roughly ten times the minutes, and
+# everything worth gating (lint including the core/ purity rule, types, tests) is platform-agnostic
+# by construction. Device builds go through EAS on demand.
+#
+# Third-party actions are pinned to a commit SHA rather than a tag. A tag is mutable; a compromised
+# or retagged action would otherwise run with repository credentials.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The gate. expo-doctor inside it is network-dependent and degrades to a warning, so a flaky
+      # registry cannot fail the build for a reason unrelated to the change.
+      - run: npm run check:code
+
+      # Advisory, never gating — it reports conventions and how many decisions remain uncovered.
+      - run: npm run check:rules

@@ -110,6 +110,16 @@ Recorded because a plan that quietly stops matching reality is worse than no pla
 - Every repository validates with the drizzle-zod barrel in both directions, because rows outlive
   versions and a restored database can hand back a value TypeScript would otherwise believe.
 
+## CI
+
+Runs `npm run check:code` on every push and pull request, on ubuntu — the same command as locally,
+because the moment the two diverge a green local run stops meaning anything. Third-party actions are
+pinned to commit SHAs rather than tags, since a tag is mutable and a retagged action would run with
+repository credentials.
+
+No device builds: macOS runners cost roughly ten times the minutes, and everything worth gating is
+platform-agnostic by construction. Device builds go through EAS on demand.
+
 ## Next
 
 1. **Buy the account and apply for the AlarmKit entitlement.** The queue is the only unbounded wait
