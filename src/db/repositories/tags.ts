@@ -8,11 +8,11 @@
  */
 import { eq } from 'drizzle-orm';
 
-import { alarmsLeftUnclearable, type AlarmKind } from '../core/registry';
-import { normaliseUid, type RegisteredTag } from '../core/tags';
+import { alarmsLeftUnclearable, type AlarmKind } from '../../core/registry';
+import { normaliseUid, type RegisteredTag } from '../../core/tags';
 import { disableAlarm, enabledKinds } from './alarms';
-import { tags, zodSchemas, type TagRole } from './schema';
-import type { AnySqliteDb } from './types';
+import { tags, zodSchemas, type TagRole } from '../schema';
+import type { AnySqliteDb } from '../types';
 
 const tagRow = zodSchemas.tables.tags.selectSchema;
 const tagInsert = zodSchemas.tables.tags.insertSchema;

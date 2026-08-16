@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import migrations from '@/db/migrations/migrations';
 import { db } from '@/db/client';
-import { readSettings, touchSettings } from '@/db/settings';
+import { readSettings, touchSettings } from '@/db/repositories';
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

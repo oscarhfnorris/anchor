@@ -8,9 +8,9 @@
 import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from '../__tests__/db';
+import { createTestDb, type TestDb } from '../../__tests__/db';
 import { enableAlarm } from './alarms';
-import { alarms, tags } from './schema';
+import { alarms, tags } from '../schema';
 import { deleteTag, readRegistry } from './tags';
 
 const NOW = 1_700_000_000_000;
