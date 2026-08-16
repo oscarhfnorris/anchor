@@ -11,8 +11,13 @@
 import { and, eq, gte, isNull, lt } from 'drizzle-orm';
 
 import type { OccurrenceRow } from '../../core/occurrences';
-import { occurrences } from '../schema';
-import { zodSchemas, type Occurrence, type OccurrenceOutcome } from '../schema';
+import { occurrenceEvents, occurrences } from '../schema';
+import {
+  zodSchemas,
+  type Occurrence,
+  type OccurrenceEventKind,
+  type OccurrenceOutcome,
+} from '../schema';
 import type { AnySqliteDb } from '../types';
 
 const row = zodSchemas.tables.occurrences.selectSchema;
@@ -121,4 +126,44 @@ export async function invalidateFuture(
     await db.delete(occurrences).where(eq(occurrences.id, o.id));
   }
   return doomed.length;
+}
+
+const eventInsert = zodSchemas.tables.occurrenceEvents.insertSchema;
+const eventRow = zodSchemas.tables.occurrenceEvents.selectSchema;
+
+/**
+ * Record something that happened during an occurrence.
+ *
+ * The append-only log is what makes the alerting state durable across the process death that iOS
+ * causes on every alarm dismissal — see `services/wake-service.ts`.
+ */
+export async function appendEvent(
+  db: AnySqliteDb,
+  occurrenceId: number,
+  kind: OccurrenceEventKind,
+  at: number,
+): Promise<void> {
+  await db.insert(occurrenceEvents).values(eventInsert.parse({ occurrenceId, kind, at }));
+}
+
+/** How many events of a kind an occurrence has — the derived counter (never a stored column). */
+export async function countEvents(
+  db: AnySqliteDb,
+  occurrenceId: number,
+  kind: OccurrenceEventKind,
+): Promise<number> {
+  const rows = await db
+    .select()
+    .from(occurrenceEvents)
+    .where(and(eq(occurrenceEvents.occurrenceId, occurrenceId), eq(occurrenceEvents.kind, kind)));
+  return rows.length;
+}
+
+/** Everything that happened during an occurrence, oldest first — why a night went wrong. */
+export async function readEvents(db: AnySqliteDb, occurrenceId: number) {
+  const rows = await db
+    .select()
+    .from(occurrenceEvents)
+    .where(eq(occurrenceEvents.occurrenceId, occurrenceId));
+  return rows.map((r: unknown) => eventRow.parse(r)).sort((a, b) => a.at - b.at);
 }

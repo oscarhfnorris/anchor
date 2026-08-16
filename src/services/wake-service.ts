@@ -1,0 +1,153 @@
+/**
+ * The wake alarm's use cases — where the reducer, the database and the platform meet.
+ *
+ * **The state is rebuilt from storage on every call, never held in memory.** iOS launches the app
+ * fresh when an alarm is dismissed, so a Stop press usually arrives in a new process. Anything kept
+ * in a variable between events is lost: `rearmCount` would reset, so the delay would never shorten
+ * (D18), and `firstRangAt` would reset, so the step gate would restart and stalling would earn a
+ * fresh allowance on every press (D35). Both failures are silent, and both reward exactly what the
+ * app exists to prevent.
+ *
+ * So `alerting` is derived: the unresolved occurrence that has fired is the alarm that is ringing,
+ * `firstRangAt` is its `fired_at`, and `rearmCount` is how many Stop presses are recorded against
+ * it. Nothing to keep in step by hand.
+ *
+ * This module performs effects; it never decides. Every branch on a rule belongs in `core/`.
+ */
+import type { AlarmEngine } from '../alarm/types';
+import { occurrenceAlarmId, type OccurrenceRow } from '../core/occurrences';
+import type { AlarmState, Context, Effect, Event } from '../core/types';
+import { reduce } from '../core/wake/reducer';
+import { readAlarms } from '../db/repositories/alarms';
+import {
+  appendEvent,
+  countEvents,
+  readOccurrences,
+  recordCleared,
+  recordFired,
+} from '../db/repositories/occurrences';
+import { readRegistry } from '../db/repositories/tags';
+import { readSettings } from '../db/repositories/settings';
+import type { AnySqliteDb } from '../db/types';
+
+export interface WakeDeps {
+  db: AnySqliteDb;
+  engine: AlarmEngine;
+  /** Steps taken since an instant. Null when the pedometer is unavailable or unauthorised (D35). */
+  stepsSince: (from: number) => Promise<number | null>;
+}
+
+/** The occurrence currently ringing, if any: fired, not yet resolved. */
+async function alertingOccurrence(
+  db: AnySqliteDb,
+  alarmId: number,
+): Promise<OccurrenceRow | undefined> {
+  const rows = await readOccurrences(db, alarmId);
+  return rows.find((o) => o.firedAt !== null && o.clearedAt === null);
+}
+
+/** Rebuild the reducer's state from what is stored. Never from memory — see the note above. */
+export async function currentState(db: AnySqliteDb, alarmId: number): Promise<AlarmState> {
+  const alerting = await alertingOccurrence(db, alarmId);
+  if (!alerting) return { kind: 'idle' };
+  return {
+    kind: 'alerting',
+    firstRangAt: alerting.firedAt!,
+    rearmCount: await countEvents(db, alerting.id, 'stopPressed'),
+  };
+}
+
+async function buildContext(deps: WakeDeps, state: AlarmState, now: number): Promise<Context> {
+  const settings = await readSettings(deps.db);
+  return {
+    now,
+    presence: 'unknown',
+    proximity: 'unknown',
+    bluetoothEnabled: true,
+    isCharging: false,
+    // Measured from the first ring, which lives in state — so the caller asks, and the reducer is
+    // handed the answer rather than reaching for it.
+    stepsSinceAlertStart:
+      state.kind === 'alerting' ? await deps.stepsSince(state.firstRangAt) : null,
+    stepThreshold: settings?.stepThreshold ?? 15,
+    registeredUids: await readRegistry(deps.db),
+  };
+}
+
+/** Carry out what the reducer asked for. Ordering follows §12: intent is written before the OS. */
+async function perform(
+  deps: WakeDeps,
+  effects: readonly Effect[],
+  occurrence: OccurrenceRow | undefined,
+  now: number,
+): Promise<void> {
+  for (const effect of effects) {
+    switch (effect.kind) {
+      case 'recordOccurrence':
+        if (!occurrence) break;
+        if (effect.firedAt !== undefined) {
+          await recordFired(deps.db, occurrence.id, effect.firedAt);
+          await appendEvent(deps.db, occurrence.id, 'fired', effect.firedAt);
+        }
+        if (effect.clearedAt !== undefined) {
+          await recordCleared(deps.db, occurrence.id, effect.clearedAt, 'cleared');
+        }
+        break;
+
+      case 'scheduleAlarm':
+        if (occurrence) await appendEvent(deps.db, occurrence.id, 'stopPressed', now);
+        await deps.engine.schedule(occurrenceAlarmId(occurrence?.id ?? 0), effect.at);
+        break;
+
+      case 'cancelAlarm':
+        if (occurrence) await deps.engine.cancel(occurrenceAlarmId(occurrence.id));
+        break;
+
+      case 'rejectScan':
+        if (occurrence) await appendEvent(deps.db, occurrence.id, 'scanRejected', now);
+        break;
+
+      // Nothing to persist: the caller renders these.
+      case 'acceptScan':
+      case 'notify':
+        break;
+
+      // Dock-only, and unreachable from the wake reducer. Listed so a new effect cannot be added
+      // without this switch failing to compile.
+      case 'startGrace':
+      case 'openSession':
+      case 'closeSession':
+        break;
+    }
+  }
+}
+
+export interface WakeOutcome {
+  state: AlarmState;
+  effects: Effect[];
+}
+
+/**
+ * Apply one event to the wake alarm.
+ *
+ * Reads state from storage, asks `core/` what should happen, performs it, and returns both so the
+ * caller can render the result. Safe to call from a cold launch, which is the normal case.
+ */
+export async function dispatch(deps: WakeDeps, event: Event, now: number): Promise<WakeOutcome> {
+  const alarm = (await readAlarms(deps.db)).find((a) => a.kind === 'wake');
+  if (!alarm) return { state: { kind: 'idle' }, effects: [] };
+
+  const state = await currentState(deps.db, alarm.id);
+  const ctx = await buildContext(deps, state, now);
+
+  // On a fire, the occurrence being rung is the earliest unresolved one that is due.
+  const occurrence =
+    (await alertingOccurrence(deps.db, alarm.id)) ??
+    (await readOccurrences(deps.db, alarm.id))
+      .filter((o) => o.firedAt === null && o.clearedAt === null && o.dueAt <= now)
+      .sort((a, b) => a.dueAt - b.dueAt)[0];
+
+  const { state: next, effects } = reduce(state, event, ctx);
+  await perform(deps, effects, occurrence, now);
+  return { state: next, effects };
+}
