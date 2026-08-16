@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.oscarnorris.anchor"
+      "bundleIdentifier": "com.oscarnorris.anchor",
+      "infoPlist": {
+        "NSAlarmKitUsageDescription": "Anchor uses alarms that can only be silenced away from your bed."
+      },
+      "deploymentTarget": "26.0"
     },
     "android": {
       "adaptiveIcon": {
