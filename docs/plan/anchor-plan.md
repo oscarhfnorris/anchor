@@ -543,7 +543,7 @@ tooling is now good.
 | Routing | Expo Router | Same file-based mental model as the Next App Router |
 | UI | NativeWind | Tailwind classes; carries the 4-point spacing discipline over |
 | DB | Drizzle + `expo-sqlite` | Same ORM idiom as the existing repo |
-| Alarm (iOS) | `expo-alarm-kit` or `react-native-nitro-ios-alarm-kit` | Community packages — pin exact versions. **iOS deployment target 26.0**, so the app runs on nothing older. `expo-alarm-kit` requires an App Group whose identifier must match its `configure()` call exactly; the Nitro module needs a physical device and no-ops entirely on Android |
+| Alarm (iOS) | `expo-alarm-kit` or `react-native-nitro-ios-alarm-kit` | Community packages — pin exact versions. **iOS deployment target 26.0**, so the app runs on nothing older. `expo-alarm-kit` exposes `configure(appGroupIdentifier)`, `scheduleAlarm` (one-shot), `scheduleRepeatingAlarm` (weekly, weekdays **1–7**), `cancelAlarm`, `getAllAlarms(): string[]` and `getLaunchPayload()`. The Nitro module needs a physical device and no-ops entirely on Android |
 | Alarm UI (iOS) | `@bacons/apple-targets` → widget extension | `AlarmAttributes` is an `ActivityAttributes`, so this is mandatory |
 | NFC | `react-native-nfc-manager` | Covers both platforms |
 | Proximity | `react-native-beacon-radar` | iBeacon, Expo-compatible in a dev build, has background scanning |
@@ -1259,6 +1259,8 @@ the cost of getting proximity wrong is being woken at 03:00.
 | **AlarmKit's per-app alarm limit** bounds the materialised horizon | Medium | `AlarmError.maximumLimitReached` is a real SDK case; reconcile must handle it loudly rather than assume scheduling succeeds |
 | AlarmKit authorisation revoked in Settings → nothing fires, silently | High, and silent | Check on every foreground, block on the home screen, name the missing permission (§8) |
 | AlarmKit bridges are young community packages | High | Pin versions; be ready to fork; step 5 is a spike for exactly this |
+| **The bridge numbers weekdays 1–7**, `Date#getDay` and `core/schedule.ts` use 0–6 | Medium, and silent | Convert at the seam only (`src/alarm/types.ts`), so `core/` keeps one convention. An off-by-one fires every alarm a day late and reads as "it didn't go off" rather than as a bug |
+| **`expo-alarm-kit` needs an App Group before anything works** — `configure()` returns false without one | High, and it undercuts the free-simulator route | Raw AlarmKit needs only the Info.plist key, but the *bridge* wants an App Group, which is paid-account gated. Verify in step 5 whether the simulator tolerates one unprovisioned; if not, the spike waits on the account after all |
 | Launch-on-dismissal too slow or unreliable to re-arm | High | Measure in step 5; fallback is a custom Swift `LiveActivityIntent` |
 | Beacon battery dies silently mid-session | **Eliminated by hardware choice** | Run the beacon off USB at the dock (§9). A mains-powered beacon has no battery to die. Verify-at-dock-time remains as a backstop for unplugging |
 | iOS background BLE scanning is throttled or unreliable | High | Region monitoring (enter/exit) rather than continuous ranging; step 10 measures the truth |
