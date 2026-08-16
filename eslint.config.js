@@ -33,6 +33,9 @@ const CORE_PURITY = {
               '@react-native/*',
               'nativewind',
               'drizzle-orm/*',
+              // Both spellings. The alias form alone left `../db/client` wide open — the rule the
+              // whole architecture rests on was passing a relative import straight through, which
+              // is worse than no rule because it was believed to be enforced.
               '@/app/*',
               '@/db/*',
               '@/ui/*',
@@ -40,6 +43,15 @@ const CORE_PURITY = {
               '@/nfc/*',
               '@/geo/*',
               '@/proximity/*',
+              '@/services/*',
+              '**/app/**',
+              '**/db/**',
+              '**/ui/**',
+              '**/alarm/**',
+              '**/nfc/**',
+              '**/geo/**',
+              '**/proximity/**',
+              '**/services/**',
             ],
             message:
               'src/core/ is pure TypeScript. It must not import platform or adapter code — that is what makes it testable and portable. Move the platform-facing part outside core/ and pass what it needs in through Context.',

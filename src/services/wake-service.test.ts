@@ -13,10 +13,18 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createTestDb, type TestDb } from '../__tests__/db';
 import { FakeAlarmEngine } from '../alarm/engine.fake';
+import { FakeNfcReader } from '../nfc/reader.fake';
 import { enableAlarm } from '../db/repositories/alarms';
 import { materialise, readEvents, readOccurrences } from '../db/repositories/occurrences';
 import { alarmDays, alarms, tags } from '../db/schema';
-import { currentState, dispatch, type WakeDeps } from './wake-service';
+import {
+  currentState,
+  dispatch,
+  firedOccurrenceId,
+  occurrenceIdFrom,
+  scanToClear,
+  type WakeDeps,
+} from './wake-service';
 
 const DUE = new Date('2026-03-09T07:00:00').getTime();
 const MIN = 60_000;
@@ -26,13 +34,15 @@ describe('the wake alarm across restarts', () => {
   let ctx: TestDb;
   let engine: FakeAlarmEngine;
   let steps: number | null;
+  let reader: FakeNfcReader;
   let deps: WakeDeps;
 
   beforeEach(async () => {
     ctx = createTestDb();
     engine = new FakeAlarmEngine();
     steps = 0;
-    deps = { db: ctx.db, engine, stepsSince: async () => steps };
+    reader = new FakeNfcReader();
+    deps = { db: ctx.db, engine, reader, stepsSince: async () => steps };
 
     await ctx.db
       .insert(alarms)
@@ -157,5 +167,55 @@ describe('the wake alarm across restarts', () => {
       'stopPressed',
       'scanRejected',
     ]);
+  });
+
+  describe('knowing which alarm rang', () => {
+    it('trusts the launch payload over guessing from what is due', async () => {
+      // A morning slept through, then today's. Without the payload the newest due one is a good
+      // guess; with it there is no guessing at all.
+      const older = DUE - 24 * 60 * MIN;
+      await materialise(ctx.db, 1, [older], older - MIN);
+      const target = (await readOccurrences(ctx.db, 1)).find((o) => o.dueAt === older)!;
+
+      await dispatch(deps, { kind: 'alarmFired' }, DUE, target.id);
+
+      const rows = await readOccurrences(ctx.db, 1);
+      expect(rows.find((o) => o.id === target.id)?.firedAt).toBe(DUE);
+      expect(rows.find((o) => o.dueAt === DUE)?.firedAt).toBeNull();
+    });
+
+    it('reads the occurrence id out of an engine alarm id', () => {
+      expect(occurrenceIdFrom('occurrence:42')).toBe(42);
+      expect(occurrenceIdFrom('something-else')).toBeUndefined();
+    });
+
+    it('consumes the launch payload once, so a foreground cannot re-arm twice', async () => {
+      engine.simulateLaunchFromAlarm('occurrence:7');
+      expect(await firedOccurrenceId(engine)).toBe(7);
+      expect(await firedOccurrenceId(engine)).toBeUndefined();
+    });
+  });
+
+  describe('scanning a tag', () => {
+    it('clears the alarm when the reader returns a registered UID', async () => {
+      await dispatch(deps, { kind: 'alarmFired' }, DUE);
+      steps = 30;
+      reader.willRead(MORNING);
+
+      const outcome = await scanToClear(deps, DUE + 2 * MIN);
+
+      expect(outcome.state.kind).toBe('cleared');
+    });
+
+    it('treats a failed read as a rejected scan, never as a dismissal (D1)', async () => {
+      await dispatch(deps, { kind: 'alarmFired' }, DUE);
+      steps = 30;
+      reader.willFail('unreadable');
+
+      const outcome = await scanToClear(deps, DUE + 2 * MIN);
+
+      expect(outcome.state.kind).toBe('alerting');
+      expect(outcome.effects).toEqual([{ kind: 'rejectScan', reason: 'unknownTag' }]);
+    });
   });
 });

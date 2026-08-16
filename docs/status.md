@@ -4,7 +4,8 @@ Written by hand, because the part worth recording is *why* things are where they
 not come out of a script. The one number that rots is deliberately not asserted here — run
 `npm run check:rules` for live decision coverage.
 
-Last reviewed against the plan: after the data-layer restructure.
+Last reviewed against the plan: after the overnight build — occurrences, reconciliation, the wake
+service, the night simulator and the golden traces.
 
 ---
 
@@ -30,9 +31,10 @@ The critical path is not code. It is £99 and an entitlement queue of unknown le
 | Area | Modules |
 | --- | --- |
 | Domain (`core/`) | `tags` · `schedule` · `lockout` · `registry` · `occurrences` · `wake/reducer` · `types` |
-| Platform seam (`alarm/`) | `types` (the `AlarmEngine` interface) · `engine.fake` |
-| Data (`db/`) | `schema/tables` · `schema/zod` · `repositories/{alarms,tags,settings}` · `client` |
-| UI (`app/`) | The status screen — Phase 1 grows this same route into the home screen |
+| Platform seams | `alarm/` — interface, iOS adapter (unverified), Android stub, fake · `nfc/` — interface and fake |
+| Data (`db/`) | `schema/{tables,zod}` · `repositories/{alarms,tags,settings,occurrences}` · `client` |
+| Services | `reconcile` · `wake-service` · `night-simulator` |
+| UI (`app/`) | The status screen, now reporting missed alarms (D25) |
 
 ## Decisions: what "covered" actually means
 
@@ -46,6 +48,7 @@ The honest breakdown:
 
 | | Why it is genuinely done |
 | --- | --- |
+| **D25** records whether it fired | End to end now: the occurrence is written when it rings, resolved when it clears, and a past-due row with no `fired_at` is reported on the home screen |
 | **D1** UID identity | Normalisation, hex-only, empty never matches — in `core/`, in the repository, and refused by the insert schema so an unnormalised value cannot reach the table |
 | **D7** settings freeze | Symmetric window, both sides of the alarm, with the reason surfaced so the UI can explain the refusal |
 | **D10** feature independence | Asserted three ways: the reducer ignores the other feature's events, deleting a tag touches only its own alarm, and the schema permits one alarm per kind |
@@ -64,7 +67,6 @@ The honest breakdown:
 | **D2** re-arm not block | The reducer reschedules rather than dismissing | Whether AlarmKit actually re-arms in time. That is build step 5's spike and a fake cannot answer it |
 | **D5** B never gives up | The wake alarm survives 200 Stop presses | Feature A's give-up window — Phase 3 |
 | **D23** wall-clock time | Schedules, including the 23- and 25-hour DST days | Session duration as absolute elapsed time — Phase 4 |
-| **D25** records whether it fired | The reducer emits `recordOccurrence`, and the miss query reads it | Nothing writes to the `occurrences` table yet; there is no occurrences repository |
 | **D34** fixed or portable | Portable, and that every tag is portable while places do not exist | Fixed tags — Phase 2, when a tag can have a place |
 
 ### Outstanding

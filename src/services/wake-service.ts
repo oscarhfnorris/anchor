@@ -15,6 +15,7 @@
  * This module performs effects; it never decides. Every branch on a rule belongs in `core/`.
  */
 import type { AlarmEngine } from '../alarm/types';
+import type { NfcReader } from '../nfc/types';
 import { occurrenceAlarmId, type OccurrenceRow } from '../core/occurrences';
 import type { AlarmState, Context, Effect, Event } from '../core/types';
 import { reduce } from '../core/wake/reducer';
@@ -35,6 +36,26 @@ export interface WakeDeps {
   engine: AlarmEngine;
   /** Steps taken since an instant. Null when the pedometer is unavailable or unauthorised (D35). */
   stepsSince: (from: number) => Promise<number | null>;
+  /** Reads a tag's hardware UID. Only the UID — never the payload (D1). */
+  reader: NfcReader;
+}
+
+/** The occurrence id encoded in an engine alarm id, or undefined if it is not one of ours. */
+export function occurrenceIdFrom(alarmId: string): number | undefined {
+  const match = /^occurrence:(\d+)$/.exec(alarmId);
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Which occurrence the OS just rang, taken from the launch payload.
+ *
+ * Authoritative, where inferring from "the latest due" is a guess. iOS hands back the id of the
+ * alarm that launched the app, and that id is ours — so use it when it is there and fall back only
+ * when the app was opened some other way.
+ */
+export async function firedOccurrenceId(engine: AlarmEngine): Promise<number | undefined> {
+  const payload = await engine.consumeLaunchPayload();
+  return payload ? occurrenceIdFrom(payload.alarmId) : undefined;
 }
 
 /** The occurrence currently ringing, if any: fired, not yet resolved. */
@@ -142,7 +163,13 @@ export interface WakeOutcome {
  * Reads state from storage, asks `core/` what should happen, performs it, and returns both so the
  * caller can render the result. Safe to call from a cold launch, which is the normal case.
  */
-export async function dispatch(deps: WakeDeps, event: Event, now: number): Promise<WakeOutcome> {
+export async function dispatch(
+  deps: WakeDeps,
+  event: Event,
+  now: number,
+  /** The occurrence the OS says rang, when the app was launched by an alarm. */
+  firedId?: number,
+): Promise<WakeOutcome> {
   const alarm = (await readAlarms(deps.db)).find((a) => a.kind === 'wake');
   if (!alarm) return { state: { kind: 'idle' }, effects: [] };
 
@@ -152,13 +179,31 @@ export async function dispatch(deps: WakeDeps, event: Event, now: number): Promi
   // The occurrence being rung is the **latest** due one, not the earliest. Picking the earliest
   // would mark a night the phone was off as having fired — erasing a genuine miss (D25) and
   // recording today's ring against the wrong morning.
+  const all = await readOccurrences(deps.db, alarm.id);
   const occurrence =
+    (firedId !== undefined ? all.find((o) => o.id === firedId) : undefined) ??
     (await alertingOccurrence(deps.db, alarm.id)) ??
-    (await readOccurrences(deps.db, alarm.id))
+    all
       .filter((o) => o.firedAt === null && o.clearedAt === null && o.dueAt <= now)
       .sort((a, b) => b.dueAt - a.dueAt)[0];
 
   const { state: next, effects } = reduce(state, event, ctx);
   await perform(deps, event, effects, occurrence, now);
   return { state: next, effects };
+}
+
+/**
+ * Read a tag and let it try to clear the alarm.
+ *
+ * The whole Phase 1 gesture, in one place. A failed read becomes a rejected scan rather than an
+ * exception, because an exception on this path is one refactor away from being swallowed into a
+ * successful dismissal — the one outcome that must never happen (D1).
+ */
+export async function scanToClear(deps: WakeDeps, now: number): Promise<WakeOutcome> {
+  const result = await deps.reader.scan();
+  if (!result.ok) {
+    const state = await currentState(deps.db, (await readAlarms(deps.db))[0]?.id ?? 0);
+    return { state, effects: [{ kind: 'rejectScan', reason: 'unknownTag' }] };
+  }
+  return dispatch(deps, { kind: 'tagScanned', uid: result.uid }, now);
 }
