@@ -9,8 +9,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { BOUNDS } from './schema';
-import { alarmWithDaysSchema, zodSchemas } from './zod-schema';
+import { BOUNDS } from './tables';
+import { alarmWithDaysSchema, zodSchemas } from './zod';
 
 const NOW = 1_700_000_000_000;
 

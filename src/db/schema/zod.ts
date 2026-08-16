@@ -24,9 +24,9 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from 'drizzle-zod';
 import { z } from 'zod';
 
-import type { Weekday } from '../core/schedule';
-import type { AlarmKind, TagRole } from '../core/types';
-import { alarmDays, alarms, appSettings, BOUNDS, occurrences, tags } from './schema';
+import type { Weekday } from '../../core/schedule';
+import type { AlarmKind, TagRole } from '../../core/types';
+import { alarmDays, alarms, appSettings, BOUNDS, occurrences, tags } from './tables';
 
 /**
  * A tag UID as stored: lowercase hex, separators already stripped.

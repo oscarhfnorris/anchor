@@ -8,10 +8,8 @@
  */
 import { eq } from 'drizzle-orm';
 
+import { appSettings, zodSchemas, type AppSettings } from './schema';
 import type { AnySqliteDb } from './types';
-import { zodSchemas } from './zod-schema';
-import { appSettings } from './schema';
-import type { AppSettings } from './zod-schema';
 
 export const SINGLETON_ID = 1;
 
