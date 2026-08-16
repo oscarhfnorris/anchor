@@ -1,35 +1,15 @@
 /**
- * Alarm and tag persistence.
+ * Alarm persistence.
  *
- * Reads rows, applies the verdict `core/registry.ts` returns, and writes the result. The rules
- * themselves — which role clears which alarm, whether an alarm may be enabled, what a deletion
- * breaks — are policy and live in `core/`, where they can be tested without a database.
- *
- * Takes a database handle rather than importing the device one, so the same code runs under
- * `better-sqlite3` in tests (§15).
+ * Reads and writes rows in the `alarms` and `alarm_days` tables. Whether an alarm *may* be enabled
+ * is policy and lives in `core/registry.ts`; this module asks for the verdict and applies it.
  */
 import { eq } from 'drizzle-orm';
 
-import {
-  alarmsLeftUnclearable,
-  canEnable,
-  hasClearingTag as hasClearingTagFor,
-  type AlarmKind,
-  type EnableVerdict,
-} from '../core/registry';
-import type { RegisteredTag } from '../core/tags';
-import { alarmDays, alarms, tags } from './schema';
-import type { AnySqliteDb } from './settings';
-
-/** Every registered tag, in the shape `core/` expects. */
-export async function readRegistry(db: AnySqliteDb): Promise<RegisteredTag[]> {
-  const rows = await db.select().from(tags);
-  return rows.map((r: { uid: string; role: 'dock' | 'morning'; placeId: number | null }) => ({
-    uid: r.uid,
-    role: r.role,
-    portable: r.placeId === null,
-  }));
-}
+import { canEnable, hasClearingTag as hasClearingTagFor, type AlarmKind, type EnableVerdict } from '../core/registry';
+import { alarmDays, alarms } from './schema';
+import { readRegistry } from './tags';
+import type { AnySqliteDb } from './types';
 
 export async function enabledKinds(db: AnySqliteDb): Promise<AlarmKind[]> {
   const rows = await db.select().from(alarms);
@@ -40,7 +20,7 @@ export async function hasClearingTag(db: AnySqliteDb, kind: AlarmKind): Promise<
   return hasClearingTagFor(kind, await readRegistry(db));
 }
 
-/** Enable an alarm if `core/` allows it (D27). */
+/** Enable an alarm if `core/` allows it — refused when nothing could clear it (D27). */
 export async function enableAlarm(
   db: AnySqliteDb,
   kind: AlarmKind,
@@ -56,20 +36,8 @@ export async function disableAlarm(db: AnySqliteDb, kind: AlarmKind, now: number
   await db.update(alarms).set({ enabled: false, updatedAt: now }).where(eq(alarms.kind, kind));
 }
 
-/**
- * Delete a tag, disabling any alarm it leaves unclearable (D27).
- *
- * Returns what it disabled so the caller can say why.
- */
-export async function deleteTag(db: AnySqliteDb, uid: string, now: number): Promise<AlarmKind[]> {
-  const doomed = alarmsLeftUnclearable(uid, await readRegistry(db), await enabledKinds(db));
-  await db.delete(tags).where(eq(tags.uid, uid));
-  for (const kind of doomed) await disableAlarm(db, kind, now);
-  return doomed;
-}
-
-/** The active weekdays for an alarm. */
+/** The active weekdays for an alarm, ascending. */
 export async function weekdaysFor(db: AnySqliteDb, alarmId: number): Promise<number[]> {
   const rows = await db.select().from(alarmDays).where(eq(alarmDays.alarmId, alarmId));
-  return rows.map((r: { weekday: number }) => r.weekday).sort();
+  return rows.map((r: { weekday: number }) => r.weekday).sort((a: number, b: number) => a - b);
 }

@@ -8,10 +8,9 @@
  * Pure functions over plain data — the caller passes the tags it read, and gets back a verdict.
  */
 import type { RegisteredTag } from './tags';
-import type { TagRole } from './types';
+import type { AlarmKind, TagRole } from './types';
 
-/** Which feature an alarm belongs to. */
-export type AlarmKind = 'dock' | 'wake';
+export type { AlarmKind };
 
 /**
  * Which tag role clears which alarm.
