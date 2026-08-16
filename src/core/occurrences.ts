@@ -109,12 +109,15 @@ export function reconcile(
 }
 
 /**
- * The blind fallback, for a bridge that cannot enumerate what it holds.
+ * Re-issue the whole desired set without reading platform state back.
  *
- * Re-issues the whole desired set every reconcile. Re-scheduling a known id overwrites rather than
- * duplicating, so idempotence survives without ever reading state back. It is strictly worse — an
- * alarm the app does not know about can never be detected or cleaned up — so it is a fallback, not
- * a preference (§12).
+ * Named a fallback when written, but with `expo-alarm-kit` it is the **primary** strategy: that
+ * bridge's `getAllAlarms()` lists what the bridge wrote to App Group storage, not what AlarmKit
+ * holds, so comparing against it compares two mirrors rather than intent against reality.
+ *
+ * Correct because re-scheduling a known id overwrites rather than duplicating, so idempotence
+ * survives without ever reading state back. Its cost is real and unavoidable here: an alarm the app
+ * does not know about can never be detected or cleaned up.
  */
 export function reissueAll(desired: readonly OccurrenceRow[], now: number): ReconcilePlan {
   return { schedule: reconcile(desired, [], now).schedule, cancel: [] };

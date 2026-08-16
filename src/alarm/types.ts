@@ -45,10 +45,19 @@ export interface AlarmEngine {
   cancel(id: string): Promise<void>;
 
   /**
-   * The ids the OS is currently holding. Reconciliation's whole premise (§12).
+   * The ids the platform layer believes are scheduled. **Best effort, not ground truth.**
    *
-   * Ids, not instants: see the note above. A bridge that cannot enumerate at all should throw
-   * `UnsupportedError`, which tells reconcile to fall back to re-issuing the desired set blind.
+   * Read `expo-alarm-kit`'s source before trusting this: `getAllAlarms()` does not ask AlarmKit what
+   * is scheduled. It lists keys the bridge itself wrote into App Group `UserDefaults`, so it is a
+   * second mirror rather than the OS's answer — and it returns an empty array when no App Group is
+   * configured, silently, because `sharedDefaults` is optional-chained throughout.
+   *
+   * That matters for reconciliation (§12), which was designed to compare intent against reality.
+   * Against this bridge it compares intent against another mirror, and two mirrors can both be
+   * wrong in the same direction. So an empty result must never be read as "the OS holds nothing" —
+   * it may equally mean the App Group is missing.
+   *
+   * A bridge that cannot enumerate at all should throw `UnsupportedError`.
    */
   listScheduled(): Promise<string[]>;
 
