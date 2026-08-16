@@ -607,7 +607,8 @@ src/
     types.ts               the AlarmEngine interface — the platform seam
     engine.ios.ts          AlarmKit
     engine.android.ts      deferred; stub that throws
-  proximity/  nfc/  geo/  db/    shared services
+  nfc/  geo/  proximity/       data sources — arrive with the phase that reads them
+  db/                          the data layer: schema/ + repositories/
   ui/                      NativeWind screens
 targets/
   alarm-widget/            SwiftUI, iOS only
@@ -616,6 +617,14 @@ targets/
 **`core/` importing nothing platform-specific is the rule the whole design rests on.** It is the
 only part that encodes "can I cheat this?", the only part worth testing exhaustively, and the only
 part an Android build would reuse rather than rewrite.
+
+**The layering is the standard mobile one — UI, domain, data.** `app/` and `ui/` are the UI layer,
+`core/` the domain layer, and `db/` the data layer with repositories as its only entry points.
+`nfc/`, `geo/` and `proximity/` are **data sources**: platform capabilities the app reads from, each
+behind an interface the way `alarm/` is. They are deliberately not called services — in mobile
+vocabulary a service is a non-UI operation like analytics, and that word invites domain logic into
+the wrong layer. Each folder appears when the phase that needs it does; an empty one is a promise,
+not a structure.
 
 **`core/dock/` and `core/wake/` are siblings, not a pipeline.** They share the tag registry, the
 schedule arithmetic, and the presence service — nothing else. The only cross-feature rule is the

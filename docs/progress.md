@@ -8,7 +8,7 @@ to update it later, and this project has already watched two documents drift fro
 a single day.
 
 At a glance: **Phase 0 complete, Phase 1 partly built.** 15 of 38 decisions (39%) are
-covered by a running test, across 123 tests in 13 files and 10 commits.
+covered by a running test, across 123 tests in 13 files and 11 commits.
 
 ## Phases
 
