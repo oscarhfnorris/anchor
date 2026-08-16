@@ -112,6 +112,37 @@ describe('the wake alarm across restarts', () => {
     expect(engine.peek()).toEqual([]);
   });
 
+  it('rings the morning that is actually due, not an older one it slept through (D25)', async () => {
+    // Two nights powered off, then it rings today. Marking the oldest as fired would erase a real
+    // miss and record today's ring against the wrong morning.
+    const older = DUE - 2 * 24 * 60 * MIN;
+    await materialise(ctx.db, 1, [older], older - MIN);
+
+    await dispatch(deps, { kind: 'alarmFired' }, DUE);
+
+    const rows = await readOccurrences(ctx.db, 1);
+    expect(rows.find((o) => o.dueAt === DUE)?.firedAt).toBe(DUE);
+    expect(rows.find((o) => o.dueAt === older)?.firedAt).toBeNull();
+  });
+
+  it('schedules nothing when there is no occurrence to re-arm against', async () => {
+    // No occurrence has fired, so a stray Stop press must not create an alarm under an invented id
+    // that nothing could ever find or cancel.
+    await dispatch(deps, { kind: 'stopPressed' }, DUE);
+    expect(engine.peek()).toEqual([]);
+  });
+
+  it('logs a Stop press from the event, not from the effect it produced', async () => {
+    await dispatch(deps, { kind: 'alarmFired' }, DUE);
+    await dispatch(deps, { kind: 'stopPressed' }, DUE + MIN);
+
+    const [o] = await readOccurrences(ctx.db, 1);
+    const kinds = (await readEvents(ctx.db, o!.id)).map((e) => e.kind);
+    // Exactly one, and only because a Stop press happened — rearmCount is counted from these, so a
+    // future rule that reschedules for another reason must not inflate it.
+    expect(kinds.filter((k) => k === 'stopPressed')).toHaveLength(1);
+  });
+
   it('leaves a full record of the night for D25', async () => {
     await dispatch(deps, { kind: 'alarmFired' }, DUE);
     await dispatch(deps, { kind: 'stopPressed' }, DUE + MIN);

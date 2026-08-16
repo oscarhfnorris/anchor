@@ -77,10 +77,18 @@ async function buildContext(deps: WakeDeps, state: AlarmState, now: number): Pro
 /** Carry out what the reducer asked for. Ordering follows §12: intent is written before the OS. */
 async function perform(
   deps: WakeDeps,
+  event: Event,
   effects: readonly Effect[],
   occurrence: OccurrenceRow | undefined,
   now: number,
 ): Promise<void> {
+  // The log records what *happened*, taken from the event itself. Inferring it from an effect would
+  // mean a future rule that reschedules for some other reason silently logs a Stop press — and
+  // rearmCount is derived by counting those, so the delay would shorten for the wrong reason.
+  if (occurrence && event.kind === 'stopPressed') {
+    await appendEvent(deps.db, occurrence.id, 'stopPressed', now);
+  }
+
   for (const effect of effects) {
     switch (effect.kind) {
       case 'recordOccurrence':
@@ -95,8 +103,9 @@ async function perform(
         break;
 
       case 'scheduleAlarm':
-        if (occurrence) await appendEvent(deps.db, occurrence.id, 'stopPressed', now);
-        await deps.engine.schedule(occurrenceAlarmId(occurrence?.id ?? 0), effect.at);
+        // No occurrence means nothing to re-arm against; scheduling under a made-up id would leave
+        // an alarm the app can never find or cancel.
+        if (occurrence) await deps.engine.schedule(occurrenceAlarmId(occurrence.id), effect.at);
         break;
 
       case 'cancelAlarm':
@@ -140,14 +149,16 @@ export async function dispatch(deps: WakeDeps, event: Event, now: number): Promi
   const state = await currentState(deps.db, alarm.id);
   const ctx = await buildContext(deps, state, now);
 
-  // On a fire, the occurrence being rung is the earliest unresolved one that is due.
+  // The occurrence being rung is the **latest** due one, not the earliest. Picking the earliest
+  // would mark a night the phone was off as having fired — erasing a genuine miss (D25) and
+  // recording today's ring against the wrong morning.
   const occurrence =
     (await alertingOccurrence(deps.db, alarm.id)) ??
     (await readOccurrences(deps.db, alarm.id))
       .filter((o) => o.firedAt === null && o.clearedAt === null && o.dueAt <= now)
-      .sort((a, b) => a.dueAt - b.dueAt)[0];
+      .sort((a, b) => b.dueAt - a.dueAt)[0];
 
   const { state: next, effects } = reduce(state, event, ctx);
-  await perform(deps, effects, occurrence, now);
+  await perform(deps, event, effects, occurrence, now);
   return { state: next, effects };
 }
