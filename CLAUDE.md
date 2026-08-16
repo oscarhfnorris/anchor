@@ -206,6 +206,15 @@ the app config or a config plugin.
 
 ## Platform seam
 
-iOS and Android alarm implementations live behind `src/alarm/types.ts` and are resolved by React
-Native's `.ios.ts` / `.android.ts` extensions. Do not add platform branching anywhere else — if a
+**`src/alarm/` is the only folder with platform variants, and that is not an accident.** AlarmKit is
+iOS-only and no cross-platform library hides it, so iOS and Android implementations live behind
+`src/alarm/types.ts` and are resolved by React Native's `.ios.ts` / `.android.ts` extensions.
+
+`nfc/`, `geo/` and `proximity/` need no variants: `react-native-nfc-manager` and `expo-location`
+cover both platforms, and the beacon library covers iBeacon on both. They get their own folders for
+the same reason as `alarm/` — each wraps a native capability behind an interface, so `core/` stays
+pure and tests use hand-written fakes — but the library is already the abstraction, so adding
+`reader.ios.ts` there would be splitting something nothing has split.
+
+Do not add platform branching anywhere else — if a
 `Platform.OS` check is creeping into `core/` or `ui/`, the seam is in the wrong place.

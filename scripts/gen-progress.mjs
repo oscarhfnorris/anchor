@@ -11,8 +11,12 @@
  * read from, not in the output.
  *
  * Run with `--check` to fail when the committed file is out of date, so CI can catch a stale one.
+ *
+ * **Nothing here may derive from git history.** An earlier version reported a commit count, which
+ * made the document stale the instant it was committed — a staleness gate that could never be green
+ * at the moment it was checked. Anything that changes as a side effect of recording the change
+ * belongs in `git log`, not in a file the gate compares.
  */
-import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
@@ -66,11 +70,6 @@ const sourceModules = files
   .map((f) => relative(ROOT, f))
   .sort();
 
-const commits = execSync('git log --oneline --no-merges', { encoding: 'utf8' })
-  .trim()
-  .split('\n')
-  .filter(Boolean).length;
-
 // --- phases ------------------------------------------------------------------------------------
 const PHASES = [
   ['0', 'The template', 'Complete', 'Runs on device; migrations, round trip and build info verified'],
@@ -104,7 +103,7 @@ w('to update it later, and this project has already watched two documents drift 
 w('a single day.');
 w();
 w(`At a glance: **Phase 0 complete, Phase 1 partly built.** ${covered.size} of ${decisions.size} decisions (${pct}%) are`);
-w(`covered by a running test, across ${totalTests} tests in ${perFile.length} files and ${commits} commits.`);
+w(`covered by a running test, across ${totalTests} tests in ${perFile.length} files.`);
 w();
 w('## Phases');
 w();
