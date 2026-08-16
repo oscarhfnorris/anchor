@@ -130,6 +130,17 @@ repository credentials.
 No device builds: macOS runners cost roughly ten times the minutes, and everything worth gating is
 platform-agnostic by construction. Device builds go through EAS on demand.
 
+## What is built but not yet connected to the app
+
+Honest gap rather than an oversight. The services exist and are tested; the screen does not call
+them, because doing so needs an `AlarmEngine` and the only real one is `engine.ios.ts`, which cannot
+run without the App Group and entitlement. Wiring an unverified native adapter into launch would risk
+the one thing currently proven to work.
+
+So the app still shows migration state, a database round trip and missed alarms — all real — and
+`reconcile`, `dispatch` and `scanToClear` wait for the account. That connection is a small piece of
+work once the spike passes, and it is the first thing to do then.
+
 ## Next
 
 1. **Buy the account and apply for the AlarmKit entitlement.** The queue is the only unbounded wait
