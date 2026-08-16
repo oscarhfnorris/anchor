@@ -45,7 +45,7 @@ const GROUPS = [
       ['lint:fix', 'ESLint with --fix.'],
       ['type-check', 'tsc over the app, scripts, tests and config.'],
       ['doctor', 'Expo SDK and native dependency compatibility.'],
-      ['db:generate', 'Regenerate SQL migrations after editing src/db/schema.ts. Commit the output.'],
+      ['db:generate', 'Regenerate SQL migrations after editing src/db/schema/tables.ts. Commit the output.'],
     ],
   },
 ];

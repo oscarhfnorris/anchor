@@ -17,11 +17,10 @@ const TASKS = [
   { name: 'lint', cmd: 'npm', args: ['run', '--silent', 'lint'] },
   { name: 'types', cmd: 'npm', args: ['run', '--silent', 'type-check'] },
   { name: 'test', cmd: 'npm', args: ['run', '--silent', 'test'] },
-  { name: 'docs', cmd: 'npm', args: ['run', '--silent', 'docs:progress:check'] },
   { name: 'doctor', cmd: 'npm', args: ['run', '--silent', 'doctor'], softFail: true },
 ];
 
-const COLOURS = { lint: 36, types: 35, test: 32, docs: 34, doctor: 33 };
+const COLOURS = { lint: 36, types: 35, test: 32, doctor: 33 };
 const useColour = process.stdout.isTTY && !process.env.NO_COLOR;
 const tag = (n) => (useColour ? `[${COLOURS[n] ?? 37}m${n}[0m` : n);
 

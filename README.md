@@ -94,7 +94,7 @@ source being visible grants no licence to use, copy, modify or redistribute it.
 | Auditing a plan before it becomes code | [`docs/development/plan-audit-guide.md`](./docs/development/plan-audit-guide.md) |
 | Reviewing code | [`docs/development/review-guide.md`](./docs/development/review-guide.md) |
 | Expo conventions, pinned to a date | [`docs/development/expo-guidelines.md`](./docs/development/expo-guidelines.md) |
-| What is built, what is blocked, decision coverage | [`docs/progress.md`](./docs/progress.md) — generated, `npm run docs:progress` |
+| Where the build has got to, and why | [`docs/status.md`](./docs/status.md) |
 
 ## Stack
 
