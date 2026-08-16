@@ -3,6 +3,13 @@
 # `npm run check:code` and nothing else: the moment CI and local diverge, a green local run stops
 # meaning anything. If a check belongs in CI it belongs in check:code, and vice versa.
 #
+# That one command runs four things, which is worth stating because this file does not show it:
+#
+#   lint    eslint, including the src/core/ purity rule
+#   types   tsc over the app, tests, scripts and config
+#   test    vitest --run — the whole suite, every *.test.ts under src/
+#   doctor  expo-doctor, soft-failing so an offline registry cannot fail the build
+#
 # Ubuntu, not macOS. No device builds here — macOS runners cost roughly ten times the minutes, and
 # everything worth gating (lint including the core/ purity rule, types, tests) is platform-agnostic
 # by construction. Device builds go through EAS on demand.
