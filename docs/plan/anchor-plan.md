@@ -1221,6 +1221,12 @@ capability that never arrives.
    Three things it does not do: enable foreign keys, offer `db:push` against a device (generate and
    commit the SQL every time), or index foreign keys.
 
+   **Never squash migrations once a database exists that you care about.** Regenerating the folder
+   produces a fresh `0000` that tries to create tables an installed device already has, and the app
+   then fails to migrate on launch — observed, not theorised. Pre-release with a disposable simulator
+   database it is free; the moment a real phone holds a night's history it is data loss. The failure
+   is at least loud: the status screen reports it rather than starting with a half-built schema.
+
    **Drizzle on Expo needs migrations bundled as strings**, since there is no filesystem to read them
    from at runtime: `babel-plugin-inline-import` for `.sql`, `sql` pushed onto Metro's `sourceExts`,
    `driver: 'expo'` in `drizzle.config.ts`, and `useMigrations(db, migrations)` at startup. Omitting

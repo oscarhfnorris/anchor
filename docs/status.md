@@ -99,6 +99,14 @@ Recorded because a plan that quietly stops matching reality is worse than no pla
 - **The bridge numbers weekdays 1–7** where `Date#getDay` uses 0–6. Converted at the seam only.
 - **`expo-alarm-kit` needs an App Group**, which the plan did not account for when calling the
   simulator spike free.
+- **`getAllAlarms()` is a mirror, not the OS.** It lists keys the bridge wrote into App Group
+  storage and never asks AlarmKit, so reconciliation compares intent against a second mirror rather
+  than reality. Blind re-issue is therefore the primary strategy, not a fallback.
+- **The alerting state was held in memory**, which iOS destroys on every alarm dismissal — so the
+  re-arm delay would never have shortened and the step gate would have restarted on every press.
+  Both silent. Now derived from stored occurrences and their event log.
+- **Squashing migrations breaks an installed app.** Observed on the simulator: a regenerated `0000`
+  fails against a database that already has the tables.
 
 ## Where the architecture moved
 
