@@ -11,9 +11,8 @@ import { eq } from 'drizzle-orm';
 import { alarmsLeftUnclearable, type AlarmKind } from '../core/registry';
 import { normaliseUid, type RegisteredTag } from '../core/tags';
 import { disableAlarm, enabledKinds } from './alarms';
-import { tags } from './schema';
+import { tags, zodSchemas, type TagRole } from './schema';
 import type { AnySqliteDb } from './types';
-import { zodSchemas, type TagRole } from './zod-schema';
 
 const tagRow = zodSchemas.tables.tags.selectSchema;
 const tagInsert = zodSchemas.tables.tags.insertSchema;

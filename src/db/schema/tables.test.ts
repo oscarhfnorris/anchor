@@ -8,8 +8,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from '../__tests__/db';
-import { alarms, appSettings, occurrences } from './schema';
+import { createTestDb, type TestDb } from '../../__tests__/db';
+import { alarms, appSettings, occurrences } from './tables';
 
 const NOW = 1_700_000_000_000;
 

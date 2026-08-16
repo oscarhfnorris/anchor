@@ -62,9 +62,12 @@ file a pointer, so they stay in sync.
 - **`src/db/`** persists. It reads rows, hands them to `core/` for a verdict, and writes the result.
   A policy decision made in `db/` is a rule that can only be tested with a schema, a migration and a
   driver — and one that the next reader will not find where they look for it.
-- **`src/db/zod-schema.ts`** is the single barrel for row validation and row types. Import both from
-  there; `schema.ts` is table definitions only. Types are inferred from the Zod schemas, so a rule
-  loosened for validation loosens the type too rather than the two drifting apart.
+- **`src/db/schema/`** describes the data: `tables.ts` the Drizzle definitions and the `BOUNDS` their
+  CHECK constraints are built from, `zod.ts` the validation and row types derived from those same
+  tables. Import both through `./schema`. Nothing in there reads or writes.
+- **`src/db/*.ts`** are the operations. Every one validates with the barrel's schemas in both
+  directions — `selectSchema` out, `insert`/`updateSchema` in — because rows outlive versions and a
+  restored database can hand back a value TypeScript will believe.
 - **`src/alarm/`** is the only place that may touch a platform alarm API, and the only place a
   `Platform.OS` check belongs.
 
