@@ -26,6 +26,16 @@ import {
   unique,
 } from 'drizzle-orm/sqlite-core';
 
+
+/**
+ * A literal number inside a `sql` template.
+ *
+ * Interpolating a plain number produces a **bound parameter**, so the CHECK is generated as
+ * `between ? and ?` — which is not a constraint at all, and the migration applies without complaint.
+ * `sql.raw` emits the digits. Safe here because these are our own constants, never user input.
+ */
+const lit = (n: number) => sql.raw(String(n));
+
 /**
  * Bounds that appear in two places by necessity.
  *
@@ -36,15 +46,6 @@ import {
  * Declaring the numbers once and using them in both is what stops that duplication drifting: change
  * the bound and both the constraint and the validation move together.
  */
-/**
- * A literal number inside a `sql` template.
- *
- * Interpolating a plain number produces a **bound parameter**, so the CHECK is generated as
- * `between ? and ?` — which is not a constraint at all, and the migration applies without complaint.
- * `sql.raw` emits the digits. Safe here because these are our own constants, never user input.
- */
-const lit = (n: number) => sql.raw(String(n));
-
 export const BOUNDS = {
   hour: { min: 0, max: 23 },
   minute: { min: 0, max: 59 },

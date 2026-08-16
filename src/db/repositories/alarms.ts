@@ -14,10 +14,10 @@
  */
 import { eq } from 'drizzle-orm';
 
-import { canEnable, hasClearingTag as hasClearingTagFor, type AlarmKind, type EnableVerdict } from '../core/registry';
-import { alarmDays, alarms, zodSchemas, type Alarm, type Weekday } from './schema';
+import { canEnable, hasClearingTag as hasClearingTagFor, type AlarmKind, type EnableVerdict } from '../../core/registry';
+import { alarmDays, alarms, zodSchemas, type Alarm, type Weekday } from '../schema';
 import { readRegistry } from './tags';
-import type { AnySqliteDb } from './types';
+import type { AnySqliteDb } from '../types';
 
 const alarmRow = zodSchemas.tables.alarms.selectSchema;
 const alarmDayRow = zodSchemas.tables.alarmDays.selectSchema;

@@ -62,12 +62,19 @@ file a pointer, so they stay in sync.
 - **`src/db/`** persists. It reads rows, hands them to `core/` for a verdict, and writes the result.
   A policy decision made in `db/` is a rule that can only be tested with a schema, a migration and a
   driver — and one that the next reader will not find where they look for it.
-- **`src/db/schema/`** describes the data: `tables.ts` the Drizzle definitions and the `BOUNDS` their
-  CHECK constraints are built from, `zod.ts` the validation and row types derived from those same
-  tables. Import both through `./schema`. Nothing in there reads or writes.
-- **`src/db/*.ts`** are the operations. Every one validates with the barrel's schemas in both
-  directions — `selectSchema` out, `insert`/`updateSchema` in — because rows outlive versions and a
-  restored database can hand back a value TypeScript will believe.
+- **`src/db/`** is the **data layer**, in the standard mobile sense (UI → domain → data). There is no
+  "server" layer on mobile; this is its equivalent.
+  - `schema/` describes the data: `tables.ts` the Drizzle definitions and the `BOUNDS` their CHECK
+    constraints are built from, `zod.ts` the validation and row types derived from those tables.
+  - `repositories/` are the **entry points**. Nothing outside `db/` may import `client.ts` or a table
+    directly — it goes through a repository, so the data source stays swappable and private.
+  - Every repository validates with the schema barrel in both directions — `selectSchema` out,
+    `insert`/`updateSchema` in — because rows outlive versions and a database restored from an older
+    build can hand back a value TypeScript would otherwise believe.
+  - **No business rules here.** Whether an alarm may be enabled, when it fires, what a deletion
+    breaks — that is `core/`. Repositories ask and apply. They are not "services": in mobile
+    vocabulary a service is a non-UI operation like analytics, and using that name here invites the
+    next person to put domain logic in the data layer.
 - **`src/alarm/`** is the only place that may touch a platform alarm API, and the only place a
   `Platform.OS` check belongs.
 

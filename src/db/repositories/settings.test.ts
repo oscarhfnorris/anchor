@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { createTestDb, type TestDb } from '../__tests__/db';
+import { createTestDb, type TestDb } from '../../__tests__/db';
 import { readSettings, touchSettings, SINGLETON_ID } from './settings';
 
 describe('app settings', () => {
