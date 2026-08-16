@@ -1,47 +1,55 @@
 /**
- * Alarm and tag persistence, and the invariant that binds them.
+ * Alarm and tag persistence.
  *
- * **An enabled alarm always has a way to be cleared** (D27). Enabling one with no registered tag
- * would end the first night with an alarm nothing can silence, and the deletion half matters just
- * as much: removing the last tag of a role must disable the alarm that depends on it, or the
- * invariant holds only at creation and quietly lapses afterwards.
+ * Reads rows, applies the verdict `core/registry.ts` returns, and writes the result. The rules
+ * themselves — which role clears which alarm, whether an alarm may be enabled, what a deletion
+ * breaks — are policy and live in `core/`, where they can be tested without a database.
  *
  * Takes a database handle rather than importing the device one, so the same code runs under
  * `better-sqlite3` in tests (§15).
  */
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
+import {
+  alarmsLeftUnclearable,
+  canEnable,
+  hasClearingTag as hasClearingTagFor,
+  type AlarmKind,
+  type EnableVerdict,
+} from '../core/registry';
+import type { RegisteredTag } from '../core/tags';
+import { alarmDays, alarms, tags } from './schema';
 import type { AnySqliteDb } from './settings';
-import { alarmDays, alarms, tags, type Alarm } from './schema';
 
-/** Which tag role clears which alarm. The dock alarm is cleared by the dock tag, and so on. */
-const CLEARING_ROLE = { dock: 'dock', wake: 'morning' } as const;
-
-export type AlarmKind = keyof typeof CLEARING_ROLE;
-
-export async function tagsForRole(db: AnySqliteDb, role: 'dock' | 'morning') {
-  return db.select().from(tags).where(eq(tags.role, role));
+/** Every registered tag, in the shape `core/` expects. */
+export async function readRegistry(db: AnySqliteDb): Promise<RegisteredTag[]> {
+  const rows = await db.select().from(tags);
+  return rows.map((r: { uid: string; role: 'dock' | 'morning'; placeId: number | null }) => ({
+    uid: r.uid,
+    role: r.role,
+    portable: r.placeId === null,
+  }));
 }
 
-/** Whether `kind` has at least one tag that could clear it. */
+export async function enabledKinds(db: AnySqliteDb): Promise<AlarmKind[]> {
+  const rows = await db.select().from(alarms);
+  return rows.filter((r: { enabled: boolean }) => r.enabled).map((r: { kind: AlarmKind }) => r.kind);
+}
+
 export async function hasClearingTag(db: AnySqliteDb, kind: AlarmKind): Promise<boolean> {
-  const rows = await tagsForRole(db, CLEARING_ROLE[kind]);
-  return rows.length > 0;
+  return hasClearingTagFor(kind, await readRegistry(db));
 }
 
-export type EnableResult = { ok: true } | { ok: false; reason: 'noClearingTag' };
-
-/**
- * Enable an alarm, refusing when nothing could clear it (D27).
- *
- * Refusing loudly here is the whole point: the alternative is an alarm that rings forever on the
- * first night with only the escape hatch as a way out, which teaches the user to reach for the
- * escape hatch.
- */
-export async function enableAlarm(db: AnySqliteDb, kind: AlarmKind, now: number): Promise<EnableResult> {
-  if (!(await hasClearingTag(db, kind))) return { ok: false, reason: 'noClearingTag' };
+/** Enable an alarm if `core/` allows it (D27). */
+export async function enableAlarm(
+  db: AnySqliteDb,
+  kind: AlarmKind,
+  now: number,
+): Promise<EnableVerdict> {
+  const verdict = canEnable(kind, await readRegistry(db));
+  if (!verdict.ok) return verdict;
   await db.update(alarms).set({ enabled: true, updatedAt: now }).where(eq(alarms.kind, kind));
-  return { ok: true };
+  return verdict;
 }
 
 export async function disableAlarm(db: AnySqliteDb, kind: AlarmKind, now: number): Promise<void> {
@@ -49,30 +57,18 @@ export async function disableAlarm(db: AnySqliteDb, kind: AlarmKind, now: number
 }
 
 /**
- * Delete a tag, disabling any alarm that can no longer be cleared (D27).
+ * Delete a tag, disabling any alarm it leaves unclearable (D27).
  *
- * Returns the alarms it disabled so the caller can tell the user *why* their alarm switched off —
- * an alarm that silently stops being enabled is the same silent failure D25 exists to prevent,
- * arriving through the settings screen instead of the bridge.
+ * Returns what it disabled so the caller can say why.
  */
 export async function deleteTag(db: AnySqliteDb, uid: string, now: number): Promise<AlarmKind[]> {
+  const doomed = alarmsLeftUnclearable(uid, await readRegistry(db), await enabledKinds(db));
   await db.delete(tags).where(eq(tags.uid, uid));
-
-  const disabled: AlarmKind[] = [];
-  for (const kind of Object.keys(CLEARING_ROLE) as AlarmKind[]) {
-    if (await hasClearingTag(db, kind)) continue;
-    const rows = (await db
-      .select()
-      .from(alarms)
-      .where(and(eq(alarms.kind, kind), eq(alarms.enabled, true)))) as Alarm[];
-    if (rows.length === 0) continue;
-    await disableAlarm(db, kind, now);
-    disabled.push(kind);
-  }
-  return disabled;
+  for (const kind of doomed) await disableAlarm(db, kind, now);
+  return doomed;
 }
 
-/** The active weekdays for an alarm, as `Weekday` values. */
+/** The active weekdays for an alarm. */
 export async function weekdaysFor(db: AnySqliteDb, alarmId: number): Promise<number[]> {
   const rows = await db.select().from(alarmDays).where(eq(alarmDays.alarmId, alarmId));
   return rows.map((r: { weekday: number }) => r.weekday).sort();

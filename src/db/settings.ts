@@ -9,7 +9,8 @@
 import { eq } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-import { appSettings, type AppSettings } from './schema';
+import { appSettings } from './schema';
+import type { AppSettings } from './zod-schema';
 
 export const SINGLETON_ID = 1;
 

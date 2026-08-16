@@ -8,6 +8,9 @@
  * Phase 1 adds tags, alarms and occurrences. Places, beacons and sessions arrive with the phases
  * that use them — a table with no code behind it is a decision made too early.
  *
+ * **Tables only.** Row types and validation live in `zod-schema.ts`, so there is one place to import
+ * from and no chance of a Zod schema and a hand-written type drifting apart.
+ *
  * Instants are unix epoch milliseconds in UTC. Wall-clock schedules are stored as separate
  * hour/minute integers when they arrive (D23) — never as instants, which is how alarm apps drift by
  * an hour twice a year.
@@ -34,8 +37,7 @@ export const appSettings = sqliteTable(
   (t) => [check('app_settings_singleton', sql`${t.id} = 1`)],
 );
 
-export type AppSettings = typeof appSettings.$inferSelect;
-export type NewAppSettings = typeof appSettings.$inferInsert;
+
 
 /**
  * Registered tags. `uid` is the natural key and is unique, so one physical tag is one row (D1).
@@ -135,7 +137,3 @@ export const occurrences = sqliteTable(
     index('occurrences_unfired_idx').on(t.dueAt).where(sql`fired_at is null`),
   ],
 );
-
-export type Tag = typeof tags.$inferSelect;
-export type Alarm = typeof alarms.$inferSelect;
-export type Occurrence = typeof occurrences.$inferSelect;

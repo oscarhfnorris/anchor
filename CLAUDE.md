@@ -55,6 +55,19 @@ file a pointer, so they stay in sync.
 - **Never run prettier** (`--write` or `--check`). Match the surrounding style; formatting is
   manual/IDE.
 
+## Where things live
+
+- **`src/core/`** decides. Any rule about *when an alarm fires or clears* — including whether an
+  alarm may be enabled at all — lives here, as a pure function over plain data.
+- **`src/db/`** persists. It reads rows, hands them to `core/` for a verdict, and writes the result.
+  A policy decision made in `db/` is a rule that can only be tested with a schema, a migration and a
+  driver — and one that the next reader will not find where they look for it.
+- **`src/db/zod-schema.ts`** is the single barrel for row validation and row types. Import both from
+  there; `schema.ts` is table definitions only. Types are inferred from the Zod schemas, so a rule
+  loosened for validation loosens the type too rather than the two drifting apart.
+- **`src/alarm/`** is the only place that may touch a platform alarm API, and the only place a
+  `Platform.OS` check belongs.
+
 ## Every business rule has a test
 
 A rule in `core/` without a test is **unfinished**, not merely untested (plan §5, D37). The decision

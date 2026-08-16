@@ -8,7 +8,7 @@ to update it later, and this project has already watched two documents drift fro
 a single day.
 
 At a glance: **Phase 0 complete, Phase 1 partly built.** 14 of 38 decisions (37%) are
-covered by a running test, across 84 tests in 8 files and 4 commits.
+covered by a running test, across 110 tests in 10 files and 5 commits.
 
 ## Phases
 
@@ -98,6 +98,7 @@ Tests are co-located, so a module with no test file beside it is visible here.
 | `src/alarm/types.ts` | — |
 | `src/core/lockout.ts` | 7 |
 | `src/core/occurrences.ts` | 15 |
+| `src/core/registry.ts` | 9 |
 | `src/core/schedule.ts` | 12 |
 | `src/core/tags.ts` | 14 |
 | `src/core/types.ts` | — |
@@ -106,6 +107,7 @@ Tests are co-located, so a module with no test file beside it is visible here.
 | `src/db/client.ts` | — |
 | `src/db/schema.ts` | 6 |
 | `src/db/settings.ts` | 4 |
+| `src/db/zod-schema.ts` | 17 |
 
 ## Tests
 
@@ -113,11 +115,13 @@ Tests are co-located, so a module with no test file beside it is visible here.
 | --- | --- |
 | `src/core/lockout.test.ts` | 7 |
 | `src/core/occurrences.test.ts` | 15 |
+| `src/core/registry.test.ts` | 9 |
 | `src/core/schedule.test.ts` | 12 |
 | `src/core/tags.test.ts` | 14 |
 | `src/core/wake/reducer.test.ts` | 19 |
 | `src/db/alarms.test.ts` | 7 |
 | `src/db/schema.test.ts` | 6 |
 | `src/db/settings.test.ts` | 4 |
-| **Total** | **84** |
+| `src/db/zod-schema.test.ts` | 17 |
+| **Total** | **110** |
 
